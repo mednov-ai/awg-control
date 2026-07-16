@@ -1,0 +1,40 @@
+services:
+  panel:
+    image: ghcr.io/mednov-ai/awg-control:${AWG_CONTROL_VERSION:?set the verified v1 release version}
+    restart: unless-stopped
+    init: true
+    read_only: true
+    ports:
+      - "127.0.0.1:8080:8080"
+    environment:
+      AWG_CONTROL_HOST: "0.0.0.0"
+      AWG_CONTROL_PORT: "8080"
+      AWG_CONTROL_DATABASE: /var/lib/awg-control/awg-control.db
+      AWG_CONTROL_MASTER_KEY_FILE: /run/secrets/awg-control-master-key
+      AWG_CONTROL_MIGRATIONS: /app/migrations
+      AWG_CONTROL_WEB_ROOT: /app/web
+      AWG_CONTROL_PUBLIC_ORIGIN: ${AWG_CONTROL_PUBLIC_ORIGIN:?set the authenticated HTTPS origin}
+      AWG_CONTROL_SECURE_COOKIES: "true"
+    volumes:
+      - awg-control-data:/var/lib/awg-control
+    secrets:
+      - awg-control-master-key
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/api/v1/health/ready').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  awg-control-data:
+
+secrets:
+  awg-control-master-key:
+    file: ${AWG_CONTROL_MASTER_KEY_PATH:-./secrets/master-key}

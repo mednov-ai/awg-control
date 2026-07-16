@@ -1,0 +1,21 @@
+[Unit]
+Description=AWG Control local expiry and quota enforcement
+After=docker.service
+Wants=docker.service
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+UMask=0077
+Environment=AWG_CONTROL_HELPER_STATE=/var/lib/awg-control-helper
+ExecStart=/usr/local/sbin/awgctl enforce
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/awg-control-helper
+RestrictAddressFamilies=AF_UNIX
+LockPersonality=true
+MemoryDenyWriteExecute=true
+
