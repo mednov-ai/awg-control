@@ -1,0 +1,38 @@
+{
+  "name": "@awg-control/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "awg-control": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "dev": "tsx watch src/main.ts",
+    "start": "node dist/main.js",
+    "clean": "rm -rf dist coverage"
+  },
+  "dependencies": {
+    "@awg-control/contracts": "workspace:*",
+    "@fastify/cookie": "^11.0.2",
+    "@fastify/rate-limit": "^10.3.0",
+    "@fastify/static": "^9.1.1",
+    "@fastify/swagger": "^9.5.1",
+    "@fastify/type-provider-typebox": "^5.2.0",
+    "@sinclair/typebox": "^0.34.38",
+    "better-sqlite3": "^12.2.0",
+    "fastify": "^5.4.0",
+    "otpauth": "^9.4.1",
+    "ssh2": "^1.16.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^24.0.10",
+    "@types/ssh2": "^1.15.5",
+    "tsx": "^4.20.3",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.4"
+  }
+}

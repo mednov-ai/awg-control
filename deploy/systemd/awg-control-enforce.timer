@@ -1,0 +1,13 @@
+[Unit]
+Description=Run AWG Control local enforcement every minute
+
+[Timer]
+OnBootSec=30s
+OnUnitActiveSec=60s
+AccuracySec=10s
+Persistent=true
+Unit=awg-control-enforce.service
+
+[Install]
+WantedBy=timers.target
+
