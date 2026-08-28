@@ -110,6 +110,89 @@ func opaque(prefix, value string) string {
 	return prefix + "-" + hex.EncodeToString(sum[:8])
 }
 
+type adapterProfile struct {
+	adapter         string
+	protocolVersion string
+	displayName     string
+	clientFields    map[string]struct{}
+	supported       bool
+}
+
+func stringSet(values ...string) map[string]struct{} {
+	result := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		result[strings.ToLower(value)] = struct{}{}
+	}
+	return result
+}
+
+var (
+	awg2ClientFields = stringSet(
+		"Jc", "Jmin", "Jmax", "S1", "S2", "S3", "S4", "H1", "H2", "H3", "H4",
+		"I1", "I2", "I3", "I4", "I5",
+	)
+	awg2RequiredFields = stringSet("Jc", "Jmin", "Jmax", "S1", "S2", "S3", "S4", "H1", "H2", "H3", "H4")
+	awg3ClientFields   = stringSet(
+		"Jc", "Jmin", "Jmax", "S1", "S2", "S3", "S4", "H1", "H2", "H3", "H4",
+		"HeaderProtectionKey", "ContentPaddingAddition", "RekeyAfterTime", "RekeyTimeout",
+		"RejectAfterTime", "KeepaliveTimeout", "MaxHandshakeAttempts", "RandomTrailers", "DisableCookies",
+		"I1", "I2", "I3", "I4", "I5",
+	)
+	awg31RequiredFields = stringSet(
+		"Jc", "Jmin", "Jmax", "S1", "S2", "S3", "S4", "H1", "H2", "H3", "H4",
+		"HeaderProtectionKey", "ContentPaddingAddition", "RandomTrailers", "DisableCookies",
+	)
+	commentedClientFields = stringSet("I1", "I2", "I3", "I4", "I5")
+)
+
+func lowerValues(values map[string]string) map[string]string {
+	result := make(map[string]string, len(values))
+	for key, value := range values {
+		result[strings.ToLower(key)] = value
+	}
+	return result
+}
+
+func hasAllFields(values map[string]string, required map[string]struct{}) bool {
+	for key := range required {
+		if strings.TrimSpace(values[key]) == "" {
+			return false
+		}
+	}
+	return true
+}
+
+func profileForConfig(binaryName string, document *configdoc.Document) adapterProfile {
+	markerFields := stringSet(
+		"Jc", "Jmin", "Jmax", "S1", "S2", "S3", "S4", "H1", "H2", "H3", "H4",
+		"HeaderProtectionKey", "ContentPaddingAddition", "RandomTrailers", "DisableCookies",
+	)
+	values := lowerValues(document.InterfaceValues(markerFields))
+	if values["headerprotectionkey"] != "" {
+		version := "3.0"
+		supported := false
+		if values["randomtrailers"] != "" && values["disablecookies"] != "" {
+			version = "3.1"
+			supported = hasAllFields(values, awg31RequiredFields)
+		}
+		return adapterProfile{
+			adapter: "awg3", protocolVersion: version, displayName: "AmneziaWG " + version,
+			clientFields: awg3ClientFields, supported: supported,
+		}
+	}
+	if binaryName == "awg" || values["jc"] != "" {
+		return adapterProfile{
+			adapter: "awg2", protocolVersion: "2", displayName: "AmneziaWG 2",
+			clientFields: awg2ClientFields,
+			supported:    hasAllFields(values, awg2RequiredFields),
+		}
+	}
+	return adapterProfile{
+		adapter: "amneziawg-legacy", protocolVersion: "legacy", displayName: "AmneziaWG Legacy",
+		clientFields: map[string]struct{}{}, supported: binaryName == "wg",
+	}
+}
+
 func (r *DockerRuntime) Discover(existing []Instance) ([]Instance, error) {
 	output, err := r.docker([]string{"ps", "--no-trunc", "--format={{.ID}}"}, nil, 2*1024*1024)
 	if err != nil {
@@ -130,10 +213,6 @@ func (r *DockerRuntime) Discover(existing []Instance) ([]Instance, error) {
 			if configPath == "" || len(data) == 0 {
 				continue
 			}
-			adapter := "amneziawg-legacy"
-			if binaryName == "awg" || bytes.Contains(bytes.ToLower(data), []byte("jc =")) {
-				adapter = "awg2"
-			}
 			serverPublicKey := strings.TrimSpace(r.safeExec(containerID, binaryName, "show", interfaceName, "public-key"))
 			udpPort := r.udpPort(containerID)
 			instance, ok := known[containerID+"/"+interfaceName]
@@ -144,18 +223,17 @@ func (r *DockerRuntime) Discover(existing []Instance) ([]Instance, error) {
 				}
 				instance.ID = id
 			}
-			fields := map[string]struct{}{
-				"jc": {}, "jmin": {}, "jmax": {}, "s1": {}, "s2": {},
-				"h1": {}, "h2": {}, "h3": {}, "h4": {},
-			}
 			document, parseErr := configdoc.Parse(data)
 			clientFields := map[string]string{}
+			profile := adapterProfile{adapter: "amneziawg-legacy", protocolVersion: "unknown", displayName: "Unsupported AmneziaWG"}
 			if parseErr == nil {
-				clientFields = document.InterfaceValues(fields)
+				profile = profileForConfig(binaryName, document)
+				clientFields = document.InterfaceValuesWithCommented(profile.clientFields, commentedClientFields)
 			}
-			managed := writable && parseErr == nil && serverPublicKey != "" && udpPort > 0
-			instance.DisplayName = adapter + " / " + interfaceName
-			instance.Adapter = adapter
+			managed := writable && parseErr == nil && profile.supported && serverPublicKey != "" && udpPort > 0
+			instance.DisplayName = profile.displayName + " / " + interfaceName
+			instance.Adapter = profile.adapter
+			instance.ProtocolVersion = profile.protocolVersion
 			instance.ContainerID = containerID
 			instance.ContainerRef = opaque("container", containerID)
 			instance.InterfaceName = interfaceName
@@ -343,7 +421,7 @@ func (r *DockerRuntime) Apply(instance Instance, operationID string, original, u
 	if err := r.copyTo(instance.ContainerID, remoteNew, updated); err != nil {
 		return err
 	}
-	stripped, err := r.exec(instance.ContainerID, instance.Binary, "strip", remoteNew)
+	stripped, err := r.exec(instance.ContainerID, quickBinary(instance), "strip", remoteNew)
 	if err != nil || len(stripped) == 0 {
 		return errors.New("adapter validation failed")
 	}
@@ -382,7 +460,7 @@ func (r *DockerRuntime) rollback(instance Instance, operationID string, original
 	if err := r.copyTo(instance.ContainerID, remoteOriginal, original); err != nil {
 		return err
 	}
-	stripped, err := r.exec(instance.ContainerID, instance.Binary, "strip", remoteOriginal)
+	stripped, err := r.exec(instance.ContainerID, quickBinary(instance), "strip", remoteOriginal)
 	if err != nil {
 		return err
 	}
@@ -433,6 +511,13 @@ func (r *DockerRuntime) copyTo(containerID, remotePath string, data []byte) erro
 func validInstance(instance Instance) bool {
 	return safeID(instance.ID) && containerIDPattern.MatchString(instance.ContainerID) && interfacePattern.MatchString(instance.InterfaceName) &&
 		(instance.Binary == "wg" || instance.Binary == "awg") && path.IsAbs(instance.ConfigPath) && strings.HasSuffix(instance.ConfigPath, ".conf")
+}
+
+func quickBinary(instance Instance) string {
+	if instance.Binary == "awg" {
+		return "awg-quick"
+	}
+	return "wg-quick"
 }
 
 func validWireGuardKey(value string) bool {
@@ -493,6 +578,9 @@ func buildClientConfig(instance Instance, privateKey, addressCIDR, endpointHost 
 	builder.WriteString("\nAddress = ")
 	builder.WriteString(addressCIDR)
 	builder.WriteString("\nDNS = 1.1.1.1\n")
+	if instance.Adapter == "awg3" {
+		builder.WriteString("MTU = 1280\n")
+	}
 	keys := make([]string, 0, len(instance.ClientFields))
 	for key := range instance.ClientFields {
 		keys = append(keys, key)

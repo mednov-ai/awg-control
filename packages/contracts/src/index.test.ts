@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { AllowedConnectionTransitions, canTransitionConnection } from "./index.js";
+import { AllowedConnectionTransitions, InstanceSchema, canTransitionConnection } from "./index.js";
 
 describe("connection state machine", () => {
   it("allows suspension and irrevocable revocation", () => {
@@ -14,3 +14,10 @@ describe("connection state machine", () => {
   });
 });
 
+describe("instance contract", () => {
+  it("accepts AWG 3.1 as a distinct adapter and protocol version", () => {
+    const schema = JSON.stringify(InstanceSchema);
+    expect(schema).toContain('"const":"awg3"');
+    expect(schema).toContain('"const":"3.1"');
+  });
+});

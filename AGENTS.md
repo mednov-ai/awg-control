@@ -21,7 +21,7 @@ Read `spec.md` before changing product behavior, architecture, persistence, API,
 - Delivery: one multi-arch Panel image plus signed amd64/arm64 Helper binaries.
 - Panel installation: Docker Compose, bound to `127.0.0.1:8080` by default.
 - Node transport: restricted OpenSSH forced-command; never mount a remote Docker socket into Panel.
-- Supported v1 adapters: AmneziaWG Legacy and AWG2.
+- Supported v1 adapters: AmneziaWG Legacy, AWG2 and AWG 3.1. AWG 3.0 is discovery-only/read-only.
 - Local and hub modes use the same SSH/helper boundary.
 - Only administrators use the v1 UI.
 - Client config and QR are issued once. Never persist a client private key.
@@ -185,7 +185,7 @@ Before considering a change complete, run the relevant subset of:
 - TypeScript lint, typecheck, unit and API contract tests;
 - React component and browser smoke tests;
 - Go format, vet, unit and race tests;
-- parser round-trip fixtures for both Legacy and AWG2;
+- parser round-trip fixtures for Legacy, AWG2 and AWG 3.1;
 - helper transaction tests for conflict, validation failure and rollback;
 - SQLite clean migration and previous-version migration/restore tests;
 - security tests for forced-command escape, injection, log redaction, CSRF and one-time issuance;

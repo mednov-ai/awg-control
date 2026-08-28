@@ -132,7 +132,7 @@ export default function NodesPage() {
                 <div className="instance-list">
                   {(instances[node.id] ?? []).map((instance) => (
                     <div className="instance-row" key={instance.id}>
-                      <div><strong>{instance.displayName}</strong><small>{instance.adapter} · {instance.interfaceName}</small></div>
+                      <div><strong>{instance.displayName}</strong><small>{instance.adapter} · {instance.protocolVersion} · {instance.interfaceName}</small></div>
                       <span className={`status ${instance.mode === "managed" ? "status-active" : "status-pending"}`}>{instance.mode === "managed" ? t("managed") : t("readOnly")}</span>
                       <div className="button-row instance-buttons">
                         <button className="button secondary" disabled={pending} onClick={() => void inspectPeers(instance)}>{t("inspectPeers")}</button>

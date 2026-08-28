@@ -33,3 +33,21 @@ func TestRemoveAndRestorePeer(t *testing.T) {
 		t.Fatalf("restore was not byte-equivalent\nwant: %q\n got: %q", fixture, document.Bytes())
 	}
 }
+
+func TestInterfaceValuesReadsOnlyExplicitCommentedClientFields(t *testing.T) {
+	fixture := []byte("[Interface]\nJc = 4\n# I1 = <r 2><b 0x0102>\n# PrivateKey = must-not-leak\n; I2 = <b 0x0304>\n")
+	document, err := Parse(fixture)
+	if err != nil {
+		t.Fatal(err)
+	}
+	values := document.InterfaceValuesWithCommented(
+		map[string]struct{}{"jc": {}},
+		map[string]struct{}{"i1": {}, "i2": {}},
+	)
+	if values["Jc"] != "4" || values["I1"] != "<r 2><b 0x0102>" || values["I2"] != "<b 0x0304>" {
+		t.Fatalf("unexpected client fields: %#v", values)
+	}
+	if _, leaked := values["PrivateKey"]; leaked {
+		t.Fatal("commented private key was included")
+	}
+}

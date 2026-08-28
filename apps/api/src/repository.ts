@@ -45,6 +45,7 @@ function toInstance(row: Row): InstanceRecord {
     nodeId: String(row.node_id),
     displayName: String(row.display_name),
     adapter: row.adapter as InstanceRecord["adapter"],
+    protocolVersion: row.protocol_version as InstanceRecord["protocolVersion"],
     containerRef: String(row.container_ref),
     interfaceName: String(row.interface_name),
     configRef: String(row.config_ref),
@@ -346,12 +347,13 @@ export class Repository {
   public upsertInstances(nodeId: string, instances: Omit<InstanceRecord, "nodeId">[]): InstanceRecord[] {
     const statement = this.db.prepare(
       `INSERT INTO instances(
-         id, node_id, display_name, adapter, container_ref, interface_name, config_ref,
+         id, node_id, display_name, adapter, protocol_version, container_ref, interface_name, config_ref,
          capabilities_json, source_fingerprint, mode, last_discovered_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(node_id, container_ref, interface_name) DO UPDATE SET
          display_name = excluded.display_name,
          adapter = excluded.adapter,
+         protocol_version = excluded.protocol_version,
          config_ref = excluded.config_ref,
          capabilities_json = excluded.capabilities_json,
          source_fingerprint = excluded.source_fingerprint,
@@ -364,6 +366,7 @@ export class Repository {
           nodeId,
           instance.displayName,
           instance.adapter,
+          instance.protocolVersion,
           instance.containerRef,
           instance.interfaceName,
           instance.configRef,

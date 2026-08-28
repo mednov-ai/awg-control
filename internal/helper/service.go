@@ -93,7 +93,8 @@ func (s *Service) discover(request protocol.Request) (any, *protocol.Error) {
 	for _, instance := range instances {
 		public = append(public, map[string]any{
 			"id": instance.ID, "displayName": instance.DisplayName, "adapter": instance.Adapter,
-			"containerRef": instance.ContainerRef, "interfaceName": instance.InterfaceName,
+			"protocolVersion": instance.ProtocolVersion,
+			"containerRef":    instance.ContainerRef, "interfaceName": instance.InterfaceName,
 			"configRef": instance.ConfigRef, "capabilities": instance.Capabilities,
 			"sourceFingerprint": instance.SourceFingerprint,
 			"readOnly":          !instance.Capabilities.Create,

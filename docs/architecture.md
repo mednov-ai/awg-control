@@ -20,6 +20,12 @@ a mismatch fails closed.
 - Panel decrypts a Node transport key only for the duration of one SSH call.
 - Helper maps opaque Instance IDs to root-only discovered metadata. API callers
   cannot provide container names or filesystem paths.
+- Discovery classifies AmneziaWG by active configuration fields. AWG 3.1 is a
+  distinct `awg3` adapter; incomplete/3.0 configurations fail closed as
+  read-only and are never treated as AWG2.
+- AWG2 and AWG 3.1 may coexist on one Node as separate Instances. Their
+  container, UDP port, subnet, persistent configuration, lock, snapshot and
+  fingerprint boundaries are independent.
 - Configuration mutations are serialized per Instance, snapshotted, validated,
   atomically replaced, applied with `syncconf`, verified, and rolled back on any
   failure. Container restart is never an apply mechanism.
@@ -30,3 +36,7 @@ Client private keys are generated inside Helper and cross the SSH/API boundary
 once. They are not part of the database schema, idempotency journal, audit model,
 backups, or browser persistence.
 
+For AWG 3.1, the one-time client template includes the server-shared header
+protection and padding/timing fields plus an explicit MTU of 1280. Only the
+allowlisted commented `I1`–`I5` fields may be promoted from server comments to
+the client template; comments containing other key-like data remain ignored.

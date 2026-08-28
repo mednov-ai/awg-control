@@ -56,7 +56,8 @@ interface DiscoveryResult {
   instances: Array<{
     id: string;
     displayName: string;
-    adapter: "amneziawg-legacy" | "awg2";
+    adapter: "amneziawg-legacy" | "awg2" | "awg3";
+    protocolVersion?: InstanceRecord["protocolVersion"];
     containerRef: string;
     interfaceName: string;
     configRef: string;
@@ -226,6 +227,7 @@ export async function registerRoutes(
           id: instance.id,
           displayName: instance.displayName,
           adapter: instance.adapter,
+          protocolVersion: instance.protocolVersion ?? (instance.adapter === "awg2" ? "2" : "legacy"),
           containerRef: instance.containerRef,
           interfaceName: instance.interfaceName,
           configRef: instance.configRef,

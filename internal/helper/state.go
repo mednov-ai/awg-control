@@ -30,6 +30,7 @@ type Instance struct {
 	ID                string            `json:"id"`
 	DisplayName       string            `json:"displayName"`
 	Adapter           string            `json:"adapter"`
+	ProtocolVersion   string            `json:"protocolVersion"`
 	ContainerID       string            `json:"containerId"`
 	ContainerRef      string            `json:"containerRef"`
 	InterfaceName     string            `json:"interfaceName"`

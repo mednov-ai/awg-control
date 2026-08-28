@@ -45,8 +45,29 @@ path and permission. The installer verifies the checksum and Sigstore bundle.
 It does not edit firewall, nginx, Docker daemon, Amnezia containers, or peers.
 
 Register the Node with the freshly verified SSH host-key fingerprint. Run
-discovery, inspect both Instances, import existing peers as `observed`, and only
+discovery, inspect every Instance, import existing peers as `observed`, and only
 then explicitly enable Instance management.
+
+## Parallel AWG 3.1 instance
+
+Panel does not install or update Amnezia containers. An operator may deploy AWG
+3.1 next to AWG2, provided that the new instance has its own container, UDP
+port, VPN subnet and root-only persistent configuration directory. Before the
+deployment:
+
+1. snapshot every existing AWG instance and record safe fingerprints, peer
+   counts, container IDs and start times;
+2. verify the proposed UDP port and VPN subnet are unused;
+3. build the engine and tools from pinned, verified AWG 3.1 tags;
+4. validate the generated configuration in a disposable container;
+5. start only the new container and verify that the existing AWG2 container ID,
+   fingerprint, peer count and start time did not change.
+
+After deployment, run read-only discovery. A valid instance appears as adapter
+`awg3`, protocol `3.1`, initially in `observed` mode. A configuration identified
+as 3.0 or missing mandatory 3.1 fields remains read-only. Enable management only
+after the first disposable client has connected successfully and rollback has
+been checked.
 
 ## Backup and upgrade
 

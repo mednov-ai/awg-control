@@ -28,6 +28,15 @@ export const InstanceModeSchema = Type.Union([
 ]);
 export type InstanceMode = Static<typeof InstanceModeSchema>;
 
+export const AWGProtocolVersionSchema = Type.Union([
+  Type.Literal("legacy"),
+  Type.Literal("2"),
+  Type.Literal("3.0"),
+  Type.Literal("3.1"),
+  Type.Literal("unknown"),
+]);
+export type AWGProtocolVersion = Static<typeof AWGProtocolVersionSchema>;
+
 export const ManagementModeSchema = Type.Union([
   Type.Literal("observed"),
   Type.Literal("managed"),
@@ -70,7 +79,8 @@ export const InstanceSchema = Type.Object(
     id: UuidSchema,
     nodeId: UuidSchema,
     displayName: Type.String({ minLength: 1, maxLength: 120 }),
-    adapter: Type.Union([Type.Literal("amneziawg-legacy"), Type.Literal("awg2")]),
+    adapter: Type.Union([Type.Literal("amneziawg-legacy"), Type.Literal("awg2"), Type.Literal("awg3")]),
+    protocolVersion: AWGProtocolVersionSchema,
     containerRef: Type.String({ minLength: 1, maxLength: 128 }),
     interfaceName: Type.String({ minLength: 1, maxLength: 32 }),
     configRef: Type.String({ minLength: 1, maxLength: 128 }),

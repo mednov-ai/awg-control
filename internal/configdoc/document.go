@@ -87,6 +87,24 @@ func property(line string) (string, string, bool) {
 	return strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1]), true
 }
 
+func commentedProperty(line string) (string, string, bool) {
+	trimmed := strings.TrimSpace(line)
+	if !strings.HasPrefix(trimmed, "#") && !strings.HasPrefix(trimmed, ";") {
+		return "", "", false
+	}
+	trimmed = strings.TrimSpace(trimmed[1:])
+	parts := strings.SplitN(trimmed, "=", 2)
+	if len(parts) != 2 {
+		return "", "", false
+	}
+	key := strings.TrimSpace(parts[0])
+	value := strings.TrimSpace(parts[1])
+	if key == "" || value == "" {
+		return "", "", false
+	}
+	return key, value, true
+}
+
 func (d *Document) Peer(publicKey string) (int, *Section) {
 	for index := range d.Sections {
 		section := &d.Sections[index]
@@ -161,6 +179,40 @@ func (d *Document) InterfaceValues(allowlist map[string]struct{}) map[string]str
 				continue
 			}
 			if _, allowed := allowlist[strings.ToLower(key)]; allowed {
+				values[key] = value
+			}
+		}
+	}
+	return values
+}
+
+// InterfaceValuesWithCommented reads active allowlisted properties and selected
+// commented properties. Amnezia keeps I1-I5 commented in the server config but
+// requires their values in client configs, so callers must explicitly allow only
+// those comment keys rather than treating arbitrary comments as configuration.
+func (d *Document) InterfaceValuesWithCommented(
+	allowlist map[string]struct{},
+	commentedAllowlist map[string]struct{},
+) map[string]string {
+	values := d.InterfaceValues(allowlist)
+	active := make(map[string]struct{}, len(values))
+	for key := range values {
+		active[strings.ToLower(key)] = struct{}{}
+	}
+	for _, section := range d.Sections {
+		if sectionName(section.Header) != "interface" {
+			continue
+		}
+		for _, line := range section.Lines {
+			key, value, ok := commentedProperty(line)
+			lower := strings.ToLower(key)
+			if !ok {
+				continue
+			}
+			if _, allowed := commentedAllowlist[lower]; !allowed {
+				continue
+			}
+			if _, exists := active[lower]; !exists {
 				values[key] = value
 			}
 		}

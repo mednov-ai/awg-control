@@ -1,8 +1,8 @@
 # AWG Control — спецификация продукта
 
 Статус: проектирование v1  
-Версия документа: 0.2  
-Дата актуализации: 2026-07-16
+Версия документа: 0.3
+Дата актуализации: 2026-08-28
 
 ## 1. Назначение документа
 
@@ -29,7 +29,7 @@ AWG Control — self-hosted web-панель для существующих и 
 
 ## 3. Цели v1
 
-1. Подключаться к уже работающим AmneziaWG Legacy и AWG2 без остановки VPN.
+1. Подключаться к уже работающим AmneziaWG Legacy, AWG2 и AWG 3.1 без остановки VPN.
 2. Обнаруживать фактическую конфигурацию, интерфейс и управляющий бинарник, а не полагаться только на имя контейнера.
 3. Импортировать существующие peers без необходимости знать их клиентские приватные ключи.
 4. Создавать пользователей и несколько подключений устройств для каждого пользователя.
@@ -43,7 +43,8 @@ AWG Control — self-hosted web-панель для существующих и 
 ## 4. Не входит в v1
 
 - собственная реализация VPN-протокола;
-- установка или обновление самих контейнеров Amnezia;
+- установка или обновление самих контейнеров Amnezia через Panel API; отдельный
+  AWG 3.1 instance разворачивается оператором и затем проходит обычный discovery;
 - мобильный VPN-клиент;
 - пользовательский кабинет для конечных пользователей;
 - OIDC/LDAP/SSO;
@@ -120,8 +121,20 @@ Frontend собирается в статические файлы и обслу
 | --- | --- | --- | --- |
 | AmneziaWG Legacy | `wg` | `wg0` | Legacy-установки Amnezia |
 | AWG2 | `awg` или совместимый `wg` | `awg0` | Новое поколение AmneziaWG |
+| AWG 3.1 | `awg` | `awg0` | Отдельный instance со своим контейнером, UDP-портом, подсетью и конфигурацией |
 
 Имена являются подсказками, а не контрактом. Helper обязан подтвердить бинарник, интерфейс, конфигурацию и runtime-состояние фактической проверкой.
+
+Версия определяется по активным полям `[Interface]`, а не по имени контейнера или
+image tag. `HeaderProtectionKey` вместе с `RandomTrailers` и `DisableCookies`
+идентифицирует AWG 3.1. Конфигурация с `HeaderProtectionKey`, но без полного набора
+полей 3.1, считается AWG 3.0 и доступна только read-only. Helper не должен
+классифицировать AWG 3.x как AWG2.
+
+AWG2 и AWG 3.1 могут работать на одном Node одновременно. У них обязательны
+разные контейнеры, UDP-порты, VPN-подсети и persistent config paths. Peers,
+снимки, fingerprint, статистика, квоты и операции управления изолируются по
+Instance ID. Установка AWG 3.1 не изменяет и не перезапускает AWG2.
 
 ### 8.2 Discovery
 
@@ -216,7 +229,9 @@ Node по необходимости сохраняет только серве�
 ### 11.3 Instance
 
 - `id`, `nodeId`, `displayName`
-- `adapter`: amneziawg-legacy/awg2
+- `adapter`: amneziawg-legacy/awg2/awg3
+- `protocolVersion`: legacy/2/3.0/3.1/unknown; поддерживаемые для мутаций
+  сочетания — legacy, AWG2 `2` и AWG3 `3.1`; остальные fail closed в read-only
 - `containerRef`, `interfaceName`, `configRef`
 - `capabilitiesJson`
 - `sourceFingerprint`
@@ -463,7 +478,9 @@ Panel и helper согласуют версию RPC. Поддерживаетс�
 - Ubuntu 22.04/24.04;
 - Debian 12/13;
 - systemd, OpenSSH и Docker с Compose v2;
-- существующие контейнерные установки AmneziaWG Legacy и AWG2.
+- существующие контейнерные установки AmneziaWG Legacy, AWG2 и AWG 3.1;
+- одновременная работа AWG2 и AWG 3.1 на одном Node при раздельных портах,
+  подсетях и persistent config paths.
 
 Целевой размер одной панели v1:
 
@@ -492,7 +509,8 @@ GitHub Actions должен выполнять:
 2. Go format, vet, unit tests и static analysis;
 3. contract tests API ↔ helper для поддерживаемых RPC-версий;
 4. migration tests с чистой и предыдущей схемой SQLite;
-5. integration tests на disposable Docker fixtures Legacy/AWG2;
+5. integration tests на disposable Docker fixtures Legacy/AWG2/AWG3.1, включая
+   одновременную работу AWG2 и AWG3.1;
 6. browser smoke для login, import и одноразовой выдачи;
 7. secret scan, dependency scan и image scan;
 8. сборку multi-arch image и helper binaries;
@@ -505,7 +523,10 @@ GitHub Actions должен выполнять:
 
 ### Unit
 
-- парсеры Legacy/AWG2, неизвестные поля и round-trip;
+- парсеры Legacy/AWG2/AWG3.1, неизвестные поля и round-trip;
+- классификация 3.0 как read-only и запрет ошибочного fallback AWG3 → AWG2;
+- клиентский шаблон AWG3.1 содержит обязательные общие параметры без сохранения
+  private key после одноразовой выдачи;
 - counter reset и traffic aggregation;
 - quota/expiry и timezone boundaries;
 - state machine Connection;
@@ -565,7 +586,9 @@ Play&Say — первый production-like compatibility target, но не зав
 v1 считается готовой, когда:
 
 - чистая установка Panel и Helper документирована и воспроизводима на всех заявленных ОС/архитектурах;
-- Legacy и AWG2 проходят одинаковый lifecycle contract;
+- Legacy, AWG2 и AWG3.1 проходят одинаковый lifecycle contract;
+- AWG2 и AWG3.1 одновременно обнаруживаются как разные Instances, а мутация
+  одного не меняет container ID, config fingerprint, peer count или uptime другого;
 - импорт не изменяет исходные конфигурации;
 - выдаваемый client config/QR доступен только один раз и не остаётся в БД/логах;
 - create/suspend/resume/revoke выполняются без рестарта контейнера;

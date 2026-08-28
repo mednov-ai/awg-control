@@ -41,9 +41,15 @@ export function openDatabase(databasePath: string, migrationsPath: string): Sqli
 
   for (const name of pending) {
     const sql = readFileSync(join(migrationsPath, name), "utf8");
+    const foreignKeysOff = sql.includes("-- awg-control: foreign-keys-off");
+    if (foreignKeysOff) db.pragma("foreign_keys = OFF");
     db.exec("BEGIN IMMEDIATE");
     try {
       db.exec(sql);
+      if (foreignKeysOff) {
+        const violations = db.pragma("foreign_key_check") as Array<Record<string, unknown>>;
+        if (violations.length > 0) throw new Error(`migration ${name} violated foreign keys`);
+      }
       if (migrationVersion(name) !== 1) {
         db.prepare("INSERT INTO schema_migrations(version, name, applied_at) VALUES (?, ?, ?)").run(
           migrationVersion(name),
@@ -55,8 +61,9 @@ export function openDatabase(databasePath: string, migrationsPath: string): Sqli
     } catch (error) {
       db.exec("ROLLBACK");
       throw error;
+    } finally {
+      if (foreignKeysOff) db.pragma("foreign_keys = ON");
     }
   }
   return db;
 }
-
