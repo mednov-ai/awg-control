@@ -92,7 +92,7 @@ jobs:
     runs-on: ubuntu-24.04
     needs: [helper, panel]
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           pattern: helper-*
           merge-multiple: true
