@@ -7,8 +7,14 @@ Create the external master key and keep a separate protected backup:
 ```bash
 install -d -m 0700 deploy/compose/secrets
 openssl rand -out deploy/compose/secrets/master-key 32
-chmod 0600 deploy/compose/secrets/master-key
+sudo chown 10001:10001 deploy/compose/secrets/master-key
+sudo chmod 0400 deploy/compose/secrets/master-key
 ```
+
+Compose file-backed secrets retain host ownership. UID/GID `10001:10001` is
+the fixed unprivileged Panel account inside the image; ownership by that account
+allows Panel to read the key without running as root or making it accessible to
+other host users. The parent directory remains operator-only.
 
 Set `AWG_CONTROL_VERSION` to the verified release tag and
 `AWG_CONTROL_PUBLIC_ORIGIN=https://awg.play-and-say.ru`, then start the
@@ -17,7 +23,7 @@ an existing nginx, Caddy, or Traefik configuration. Do not expose port 8080
 directly to the Internet.
 
 Copy `deploy/compose/.env.example` outside the repository and keep the master
-key file mode at `0600`. Short sessions default to 12 hours. Remembered sessions
+key file owned by `10001:10001` with mode `0400`. Short sessions default to 12 hours. Remembered sessions
 default to 30 days absolute and 7 days idle, with activity persisted at most
 every 5 minutes. Production trusts one proxy hop because the Docker-published
 port is reachable only from loopback nginx; never combine this setting with a

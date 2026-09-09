@@ -22,9 +22,17 @@ cleanup() {
 }
 trap cleanup EXIT
 
-openssl rand -out "$MASTER_KEY_PATH" 32
-chmod 0600 "$MASTER_KEY_PATH"
 docker tag "$SOURCE_IMAGE" ghcr.io/mednov-ai/awg-control:compose-test
+
+# Compose file-backed secrets retain their host ownership. Create this disposable
+# key as the same unprivileged UID/GID used by Panel so it remains mode 0400.
+chmod 0777 "$TEST_DIR"
+docker run --rm \
+  --volume "$TEST_DIR:/secret" \
+  --entrypoint sh \
+  "$SOURCE_IMAGE" \
+  -c 'umask 077; head -c 32 /dev/urandom > /secret/master-key; chmod 0400 /secret/master-key'
+chmod 0700 "$TEST_DIR"
 
 export AWG_CONTROL_VERSION="compose-test"
 export AWG_CONTROL_PUBLIC_ORIGIN="https://panel.example"

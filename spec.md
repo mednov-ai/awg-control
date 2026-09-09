@@ -404,7 +404,7 @@ Bootstrap выполняется оператором с существующи�
 5. Panel закрепляет SSH host key fingerprint при регистрации Node; несовпадение блокирует соединение.
 6. PTY, agent forwarding, port forwarding, X11 forwarding и user rc запрещены.
 
-Transport private key панели хранится в SQLite только в виде AES-256-GCM ciphertext. Master key монтируется отдельно, например `/run/secrets/awg-control-master-key`, и не находится в SQLite volume или Docker image. Запуск без валидного master key завершается ошибкой. Ротация transport key и master key должна быть документированной CLI-операцией.
+Transport private key панели хранится в SQLite только в виде AES-256-GCM ciphertext. Master key монтируется отдельно, например `/run/secrets/awg-control-master-key`, и не находится в SQLite volume или Docker image. Для Docker Compose file-backed secret исходный файл принадлежит фиксированному непривилегированному UID/GID Panel `10001:10001` и имеет режим `0400`; Panel не запускается от root и файл не делается доступным остальным пользователям хоста. Запуск без валидного master key завершается ошибкой. Ротация transport key и master key должна быть документированной CLI-операцией.
 
 ## 17. UI
 
