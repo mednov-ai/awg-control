@@ -16,23 +16,23 @@
   },
   "dependencies": {
     "@awg-control/contracts": "workspace:*",
-    "@fastify/cookie": "^11.0.2",
+    "@fastify/cookie": "^11.1.2",
     "@fastify/rate-limit": "^10.3.0",
-    "@fastify/static": "^9.1.1",
-    "@fastify/swagger": "^9.5.1",
+    "@fastify/static": "^10.1.1",
+    "@fastify/swagger": "^9.8.1",
     "@fastify/type-provider-typebox": "^5.2.0",
-    "@sinclair/typebox": "^0.34.38",
-    "better-sqlite3": "^12.2.0",
-    "fastify": "^5.4.0",
-    "otpauth": "^9.4.1",
-    "ssh2": "^1.16.0"
+    "@sinclair/typebox": "^0.34.52",
+    "better-sqlite3": "^12.11.1",
+    "fastify": "^5.12.3",
+    "otpauth": "^9.5.2",
+    "ssh2": "^1.17.0"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
-    "@types/node": "^24.0.10",
-    "@types/ssh2": "^1.15.5",
-    "tsx": "^4.20.3",
-    "typescript": "^5.8.3",
-    "vitest": "^3.2.4"
+    "@types/node": "^24.13.3",
+    "@types/ssh2": "^1.15.6",
+    "tsx": "^4.23.13",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.11"
   }
 }

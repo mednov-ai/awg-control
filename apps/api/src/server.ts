@@ -43,7 +43,7 @@ export async function buildServer(
       },
     },
     bodyLimit: 256 * 1024,
-    trustProxy: config.trustedProxyHops === 0 ? false : config.trustedProxyHops,
+    trustProxy: config.trustedProxyHops === 0 ? false : (_address: string, hop: number) => hop === 0,
     ajv: { customOptions: { removeAdditional: false } },
     genReqId: () => crypto.randomUUID(),
   }).withTypeProvider<TypeBoxTypeProvider>();
