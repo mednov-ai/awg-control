@@ -38,7 +38,7 @@
 ## 6. Verification and staged rollout
 
 - [x] 6.1 Run TypeScript lint, typecheck, unit/API contract tests, production build, migration/restore tests, browser smoke tests, Go format/vet/race tests, shell validation, and Compose install/upgrade/uninstall tests.
-- [ ] 6.2 Create a signed Panel/Helper release and verify image signature, Helper checksums, Sigstore bundles, SBOMs, and current/previous RPC compatibility before server changes.
+- [x] 6.2 Create a signed Panel/Helper release and verify image signature, Helper checksums, Sigstore bundles, SBOMs, and current/previous RPC compatibility before server changes.
 - [ ] 6.3 Capture a fresh redacted VPS baseline and obtain explicit operator approval before installing Panel, issuing a certificate, enabling the nginx site, or reloading nginx.
 - [ ] 6.4 Deploy Panel on loopback, create the first administrator through password stdin, enroll TOTP, enable the separate nginx site only after `nginx -t`, and verify HTTPS readiness.
 - [ ] 6.5 Validate short and remembered login from a phone, close/reopen behavior, session inventory, selective revocation, logout, Russian/English UI, and one disposable Connection workflow without exposing its config or QR.
