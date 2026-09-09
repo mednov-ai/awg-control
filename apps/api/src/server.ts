@@ -43,7 +43,7 @@ export async function buildServer(
       },
     },
     bodyLimit: 256 * 1024,
-    trustProxy: false,
+    trustProxy: config.trustedProxyHops === 0 ? false : config.trustedProxyHops,
     ajv: { customOptions: { removeAdditional: false } },
     genReqId: () => crypto.randomUUID(),
   }).withTypeProvider<TypeBoxTypeProvider>();
@@ -84,9 +84,12 @@ export async function buildServer(
   app.setErrorHandler(async (error, request, reply) => {
     const appError = error instanceof AppError ? error : null;
     const validation = typeof error === "object" && error !== null && "validation" in error && Boolean((error as { validation?: unknown }).validation);
-    const status = appError?.status ?? (validation ? 400 : 500);
-    const code = appError?.code ?? (validation ? ErrorCode.ValidationFailed : ErrorCode.InternalError);
-    const title = appError?.message ?? (validation ? "Request validation failed" : "Internal server error");
+    const frameworkStatus = typeof (error as { statusCode?: unknown }).statusCode === "number"
+      ? (error as { statusCode: number }).statusCode
+      : null;
+    const status = appError?.status ?? (validation ? 400 : frameworkStatus ?? 500);
+    const code = appError?.code ?? (validation ? ErrorCode.ValidationFailed : status === 429 ? ErrorCode.RateLimited : ErrorCode.InternalError);
+    const title = appError?.message ?? (validation ? "Request validation failed" : status === 429 ? "Too many requests" : "Internal server error");
     if (status >= 500) request.log.error({ err: error, code }, "request failed");
     else request.log.info({ code, status }, "request rejected");
     return reply

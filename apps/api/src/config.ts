@@ -9,8 +9,12 @@ export interface AppConfig {
   webRoot: string | null;
   masterKey: Buffer;
   sessionTtlSeconds: number;
+  rememberedSessionTtlSeconds: number;
+  rememberedSessionIdleTtlSeconds: number;
+  sessionActivityWriteIntervalSeconds: number;
   secureCookies: boolean;
   publicOrigin: string | null;
+  trustedProxyHops: number;
   pollingEnabled: boolean;
 }
 
@@ -18,6 +22,20 @@ function integer(value: string | undefined, fallback: number, name: string): num
   const parsed = Number.parseInt(value ?? String(fallback), 10);
   if (!Number.isSafeInteger(parsed) || parsed <= 0) {
     throw new Error(`${name} must be a positive integer`);
+  }
+  return parsed;
+}
+
+function boundedInteger(value: string | undefined, fallback: number, name: string, minimum: number, maximum: number): number {
+  const parsed = integer(value, fallback, name);
+  if (parsed < minimum || parsed > maximum) throw new Error(`${name} must be between ${minimum} and ${maximum}`);
+  return parsed;
+}
+
+function nonNegativeInteger(value: string | undefined, fallback: number, name: string, maximum: number): number {
+  const parsed = Number.parseInt(value ?? String(fallback), 10);
+  if (!Number.isSafeInteger(parsed) || parsed < 0 || parsed > maximum) {
+    throw new Error(`${name} must be between 0 and ${maximum}`);
   }
   return parsed;
 }
@@ -46,10 +64,13 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     migrationsPath: resolve(env.AWG_CONTROL_MIGRATIONS ?? new URL("../migrations", import.meta.url).pathname),
     webRoot: env.AWG_CONTROL_WEB_ROOT ? resolve(env.AWG_CONTROL_WEB_ROOT) : null,
     masterKey: readMasterKey(env.AWG_CONTROL_MASTER_KEY_FILE),
-    sessionTtlSeconds: integer(env.AWG_CONTROL_SESSION_TTL_SECONDS, 43_200, "AWG_CONTROL_SESSION_TTL_SECONDS"),
+    sessionTtlSeconds: boundedInteger(env.AWG_CONTROL_SESSION_TTL_SECONDS, 43_200, "AWG_CONTROL_SESSION_TTL_SECONDS", 300, 43_200),
+    rememberedSessionTtlSeconds: boundedInteger(env.AWG_CONTROL_REMEMBERED_SESSION_TTL_SECONDS, 2_592_000, "AWG_CONTROL_REMEMBERED_SESSION_TTL_SECONDS", 3_600, 2_592_000),
+    rememberedSessionIdleTtlSeconds: boundedInteger(env.AWG_CONTROL_REMEMBERED_SESSION_IDLE_TTL_SECONDS, 604_800, "AWG_CONTROL_REMEMBERED_SESSION_IDLE_TTL_SECONDS", 300, 604_800),
+    sessionActivityWriteIntervalSeconds: boundedInteger(env.AWG_CONTROL_SESSION_ACTIVITY_WRITE_INTERVAL_SECONDS, 300, "AWG_CONTROL_SESSION_ACTIVITY_WRITE_INTERVAL_SECONDS", 30, 3_600),
     secureCookies: env.AWG_CONTROL_SECURE_COOKIES !== "false",
     publicOrigin: env.AWG_CONTROL_PUBLIC_ORIGIN ?? null,
+    trustedProxyHops: nonNegativeInteger(env.AWG_CONTROL_TRUSTED_PROXY_HOPS, 0, "AWG_CONTROL_TRUSTED_PROXY_HOPS", 1),
     pollingEnabled: env.AWG_CONTROL_POLLING_ENABLED !== "false",
   };
 }
-

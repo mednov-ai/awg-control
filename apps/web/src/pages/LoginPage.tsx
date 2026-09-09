@@ -2,6 +2,8 @@ import { useState, type FormEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { api } from "../api";
+import { ApiProblem } from "../api";
+import { coarseDeviceLabel } from "../device";
 import { useI18n } from "../i18n";
 
 export function LoginPage() {
@@ -11,6 +13,7 @@ export function LoginPage() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [totp, setTotp] = useState("");
+  const [rememberDevice, setRememberDevice] = useState(false);
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
 
@@ -19,10 +22,16 @@ export function LoginPage() {
     setPending(true);
     setError("");
     try {
-      const session = await api.login(username, password, totp || undefined);
+      const session = await api.login(username, password, {
+        ...(totp ? { totp } : {}),
+        rememberDevice,
+        ...(rememberDevice ? { deviceLabel: coarseDeviceLabel(navigator.userAgent) } : {}),
+      });
       queryClient.setQueryData(["session"], session);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : t("loginError"));
+      setError(caught instanceof ApiProblem && caught.problem.code === "REMEMBERED_SESSION_REQUIRES_TOTP"
+        ? t("rememberRequiresTotp")
+        : caught instanceof Error ? caught.message : t("loginError"));
     } finally {
       setPassword("");
       setPending(false);
@@ -38,6 +47,7 @@ export function LoginPage() {
           <label>{t("username")}<input autoComplete="username" required value={username} onChange={(event) => setUsername(event.target.value)} /></label>
           <label>{t("password")}<input type="password" autoComplete="current-password" required value={password} onChange={(event) => setPassword(event.target.value)} /></label>
           <label>{t("oneTimeCode")}<input inputMode="numeric" autoComplete="one-time-code" value={totp} onChange={(event) => setTotp(event.target.value)} /></label>
+          <label className="checkbox-row"><input type="checkbox" checked={rememberDevice} onChange={(event) => setRememberDevice(event.target.checked)} /><span><strong>{t("rememberDevice")}</strong><small>{t("rememberDeviceHelp")}</small></span></label>
           {error ? <p className="form-error" role="alert">{error}</p> : null}
           <button className="button primary wide" disabled={pending || Boolean(bootstrap.data?.required)}>{pending ? t("loading") : t("signIn")}</button>
         </form>
@@ -49,4 +59,3 @@ export function LoginPage() {
     </main>
   );
 }
-

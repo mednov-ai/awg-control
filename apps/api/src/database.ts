@@ -2,7 +2,7 @@ import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync } from "
 import { basename, dirname, join } from "node:path";
 import Database from "better-sqlite3";
 
-import { utcNow } from "./lib/ids.js";
+import { utcNow, uuidv7 } from "./lib/ids.js";
 
 export type SqliteDatabase = Database.Database;
 
@@ -16,6 +16,7 @@ export function openDatabase(databasePath: string, migrationsPath: string): Sqli
   mkdirSync(dirname(databasePath), { recursive: true, mode: 0o700 });
   const databaseExists = existsSync(databasePath);
   const db = new Database(databasePath);
+  db.function("uuidv7", { deterministic: false }, () => uuidv7());
   db.pragma("journal_mode = WAL");
   db.pragma("foreign_keys = ON");
   db.pragma("busy_timeout = 5000");

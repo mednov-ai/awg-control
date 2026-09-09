@@ -179,6 +179,51 @@ export const AdminSchema = Type.Object(
 );
 export type Admin = Static<typeof AdminSchema>;
 
+export const SessionKindSchema = Type.Union([Type.Literal("short"), Type.Literal("remembered")]);
+export type SessionKind = Static<typeof SessionKindSchema>;
+
+export const DeviceLabelSchema = Type.String({ minLength: 1, maxLength: 80, pattern: "^[^\\r\\n\\t]+$" });
+
+export const LoginRequestSchema = Type.Object(
+  {
+    username: Type.String({ minLength: 3, maxLength: 64 }),
+    password: Type.String({ minLength: 1, maxLength: 1024 }),
+    totp: Type.Optional(Type.String({ minLength: 6, maxLength: 16 })),
+    recoveryCode: Type.Optional(Type.String({ minLength: 8, maxLength: 32 })),
+    rememberDevice: Type.Optional(Type.Boolean()),
+    deviceLabel: Type.Optional(DeviceLabelSchema),
+  },
+  { additionalProperties: false },
+);
+export type LoginRequest = Static<typeof LoginRequestSchema>;
+
+export const AdminSessionSchema = Type.Object(
+  {
+    id: UuidSchema,
+    kind: SessionKindSchema,
+    current: Type.Boolean(),
+    deviceLabel: Type.Union([DeviceLabelSchema, Type.Null()]),
+    createdAt: TimestampSchema,
+    lastSeenAt: TimestampSchema,
+    expiresAt: TimestampSchema,
+    idleExpiresAt: Type.Union([TimestampSchema, Type.Null()]),
+    remoteAddress: Type.Union([Type.String({ maxLength: 80 }), Type.Null()]),
+  },
+  { additionalProperties: false },
+);
+export type AdminSession = Static<typeof AdminSessionSchema>;
+
+export const SessionListResponseSchema = Type.Object(
+  { items: Type.Array(AdminSessionSchema) },
+  { additionalProperties: false },
+);
+export type SessionListResponse = Static<typeof SessionListResponseSchema>;
+
+export const SessionRevocationResponseSchema = Type.Object(
+  { revoked: Type.Integer({ minimum: 0 }) },
+  { additionalProperties: false },
+);
+
 export const ProblemSchema = Type.Object(
   {
     type: Type.String({ minLength: 1 }),
@@ -195,7 +240,10 @@ export type Problem = Static<typeof ProblemSchema>;
 export const ErrorCode = {
   AuthenticationRequired: "AUTHENTICATION_REQUIRED",
   InvalidCredentials: "INVALID_CREDENTIALS",
+  RememberedSessionRequiresTotp: "REMEMBERED_SESSION_REQUIRES_TOTP",
+  SessionNotFound: "SESSION_NOT_FOUND",
   CsrfRejected: "CSRF_REJECTED",
+  RateLimited: "RATE_LIMITED",
   ValidationFailed: "VALIDATION_FAILED",
   NotFound: "NOT_FOUND",
   Conflict: "CONFLICT",

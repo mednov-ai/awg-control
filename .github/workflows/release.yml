@@ -32,6 +32,11 @@ jobs:
       - run: go vet ./...
       - run: go test -race ./...
       - run: bash -n scripts/*.sh
+      - run: docker compose -f deploy/compose/compose.yaml config --quiet
+        env:
+          AWG_CONTROL_VERSION: ${{ github.ref_name }}
+          AWG_CONTROL_PUBLIC_ORIGIN: https://panel.example
+          AWG_CONTROL_MASTER_KEY_PATH: /tmp/awg-control-release-check-key
 
   helper:
     runs-on: ubuntu-24.04

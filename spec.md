@@ -317,8 +317,11 @@ Client private key и полный client config отсутствуют в сх�
 
 | Метод и путь | Назначение |
 | --- | --- |
-| `POST /auth/login` | Создать административную сессию |
+| `POST /auth/login` | Создать короткую или remembered административную сессию |
 | `POST /auth/logout` | Завершить сессию |
+| `GET /auth/sessions` | Показать безопасные метаданные собственных активных сессий |
+| `DELETE /auth/sessions/:id` | Отозвать одну собственную сессию (`Idempotency-Key`) |
+| `POST /auth/sessions/revoke-others` | Отозвать все собственные сессии, кроме текущей (`Idempotency-Key`) |
 | `GET /auth/me` | Текущий администратор |
 | `GET/POST /nodes` | Список и регистрация Nodes |
 | `POST /nodes/{id}/discover` | Запустить read-only discovery |
@@ -375,10 +378,17 @@ Helper никогда не выполняет строку как shell и не 
 - Локальные административные аккаунты.
 - Пароли хэшируются Node.js `scrypt` с индивидуальной salt и версионированными параметрами.
 - Сессия использует случайный server-side session ID в cookie `HttpOnly`, `Secure`, `SameSite=Strict`.
+- Обычная сессия имеет абсолютный срок не более 12 часов. Опциональная remembered-сессия допускается только после успешной проверки включённого TOTP, имеет абсолютный срок не более 30 дней и idle-срок не более 7 дней.
+- В БД хранится только hash cookie credential. Для управления сессиями используется отдельный UUIDv7; API возвращает только грубую метку устройства, времена, тип сессии и маскированный сетевой адрес.
+- Permanent API tokens, URL tokens, query/fragment credentials и browser bearer tokens в `Authorization` не являются способом входа в административный Web UI. Сессионный credential недоступен JavaScript и не хранится в `localStorage`/`sessionStorage`.
+- Недействительная, истёкшая, idle-expired или отозванная cookie очищается сервером. Успешный login всегда выпускает новый credential и не переиспользует присланную cookie.
+- Администратор видит и отзывает только собственные сессии; отзыв немедленный, идемпотентный и аудируемый. Запись активности remembered-сессии ограничивается настраиваемым интервалом.
 - Все мутации защищены Origin/CSRF проверкой.
 - Login и чувствительные операции имеют rate limit.
 - Первый admin создаётся одноразовой CLI-командой, а не default password.
 - Опциональный TOTP доступен в v1; recovery codes показываются один раз и хранятся как hash.
+
+Production Panel публикуется на отдельном origin `https://awg.play-and-say.ru`. Контейнер по умолчанию остаётся привязан к `127.0.0.1:8080`; отдельный nginx virtual host перенаправляет HTTP на HTTPS, завершает TLS, перезаписывает forwarding headers и проксирует только на этот loopback endpoint. API доверяет ровно одному локальному reverse-proxy hop и проверяет unsafe Origin строго против настроенного public origin. Существующий virtual host `play-and-say.ru` и upstream `127.0.0.1:3000` не изменяются.
 - API не поддерживает CORS по умолчанию.
 - Content Security Policy запрещает сторонние scripts и передачу QR payload наружу.
 - Журналы используют allowlist полей; request/response body для issuance endpoint не логируется.
@@ -421,6 +431,7 @@ QR строится в браузере из уже полученного од�
 - Все schema migrations нумеруются, транзакционны и выполняются перед readiness.
 - Перед необратимой миграцией автоматически создаётся backup SQLite.
 - Downgrade через старый бинарник не гарантируется; rollback релиза использует backup совместимой схемы.
+- Миграция remembered-сессий создаёт UUIDv7 public ID и сохраняет существующие записи как короткие с прежним абсолютным сроком. Перед миграцией обязателен SQLite backup. Rollback использует согласованную пару старого image и pre-migration backup; новые remembered-сессии не конвертируются в долгоживущие credentials.
 - В backup SQLite transport keys остаются зашифрованными. Master key резервируется отдельно оператором.
 - AuditEvent append-only для приложения; retention настраивается отдельно от traffic rollups.
 
@@ -532,6 +543,8 @@ GitHub Actions должен выполнять:
 - state machine Connection;
 - redaction и запрет sensitive logging;
 - idempotency и conflict detection.
+- absolute и idle expiry административных сессий, throttled activity update,
+  cross-admin isolation и retention cleanup.
 
 ### Integration
 
@@ -542,6 +555,10 @@ GitHub Actions должен выполнять:
 - недоступный Panel при локальном `awgctl enforce`;
 - helper/API version negotiation;
 - SQLite backup/migration/restore.
+- миграция существующей сессии в `short` без изменения hash credential или
+  admin relation;
+- short/remembered login, список собственных сессий, выборочный отзыв и отзыв
+  всех кроме текущей.
 
 ### Security
 
@@ -551,6 +568,19 @@ GitHub Actions должен выполнять:
 - config response не кэшируется и не логируется;
 - повтор issuance не возвращает private key;
 - CSRF, session fixation, rate limit и TOTP recovery.
+- запрет query/fragment/Authorization fallback, очистка недействительной cookie,
+  строгий public Origin и недоверие поддельным forwarding headers.
+
+### Production publication acceptance
+
+- `awg.play-and-say.ru` обслуживается действующим TLS certificate через отдельный
+  nginx virtual host, а Panel слушает только `127.0.0.1:8080`;
+- HTTP перенаправляется на HTTPS без credentials, nginx перезаписывает forwarded
+  metadata, а `play-and-say.ru` продолжает работать через прежний upstream;
+- до и после rollout совпадают container IDs/start times/restart counts, peer
+  counts, UDP ports и безопасные fingerprints существующих AWG-инстансов;
+- Panel-only rollback проверен с pre-migration SQLite backup и не затрагивает
+  сайт, Docker, Helper, Amnezia containers или peers.
 
 ### End-to-end
 

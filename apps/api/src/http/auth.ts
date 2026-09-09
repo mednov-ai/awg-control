@@ -2,8 +2,16 @@ import type { FastifyInstance, FastifyRequest } from "fastify";
 import { Type } from "@sinclair/typebox";
 import * as OTPAuth from "otpauth";
 
-import { AdminSchema, ErrorCode } from "@awg-control/contracts";
-import type { Admin } from "@awg-control/contracts";
+import {
+  AdminSchema,
+  ErrorCode,
+  LoginRequestSchema,
+  OperationIdSchema,
+  SessionListResponseSchema,
+  SessionRevocationResponseSchema,
+  UuidSchema,
+} from "@awg-control/contracts";
+import type { Admin, LoginRequest } from "@awg-control/contracts";
 
 import type { AppConfig } from "../config.js";
 import type { Repository } from "../repository.js";
@@ -13,6 +21,7 @@ import {
   decryptSecret,
   encryptSecret,
   hashOpaque,
+  requestFingerprint,
   verifyPassword,
 } from "../security/crypto.js";
 import { AppError } from "./errors.js";
@@ -34,6 +43,14 @@ function sessionOptions(config: AppConfig, expires: Date) {
     sameSite: "strict" as const,
     expires,
   };
+}
+
+function operationId(request: FastifyRequest): string {
+  const value = request.headers["idempotency-key"];
+  if (typeof value !== "string" || value.length < 1 || value.length > 128 || !/^[A-Za-z0-9._:-]+$/.test(value)) {
+    throw new AppError(400, ErrorCode.ValidationFailed, "A valid Idempotency-Key header is required");
+  }
+  return value;
 }
 
 function totp(secret: string, username: string): OTPAuth.TOTP {
@@ -59,14 +76,21 @@ export async function registerAuthentication(
   app.decorateRequest("admin", null);
   app.decorateRequest("sessionToken", null);
 
-  app.addHook("onRequest", async (request) => {
+  app.addHook("onRequest", async (request, reply) => {
     const token = request.cookies[SESSION_COOKIE];
     if (!token) return;
     const session = repository.getSession(token);
-    if (!session) return;
+    if (!session) {
+      reply.clearCookie(SESSION_COOKIE, { path: "/" });
+      return;
+    }
     request.admin = session.admin;
     request.sessionToken = token;
-    repository.touchSession(token);
+  });
+
+  app.addHook("onResponse", async (request) => {
+    if (!request.admin || !request.sessionToken) return;
+    repository.touchSession(request.sessionToken, config.rememberedSessionIdleTtlSeconds, config.sessionActivityWriteIntervalSeconds);
   });
 
   app.get("/api/v1/auth/bootstrap", async () => ({ required: repository.countAdmins() === 0 }));
@@ -77,20 +101,12 @@ export async function registerAuthentication(
       config: { rateLimit: { max: 10, timeWindow: "1 minute" } },
       schema: {
         tags: ["auth"],
-        body: Type.Object(
-          {
-            username: Type.String({ minLength: 3, maxLength: 64 }),
-            password: Type.String({ minLength: 1, maxLength: 1024 }),
-            totp: Type.Optional(Type.String({ minLength: 6, maxLength: 16 })),
-            recoveryCode: Type.Optional(Type.String({ minLength: 8, maxLength: 32 })),
-          },
-          { additionalProperties: false },
-        ),
+        body: LoginRequestSchema,
         response: { 200: Type.Object({ admin: AdminSchema }, { additionalProperties: false }) },
       },
     },
     async (request, reply) => {
-      const body = request.body as { username: string; password: string; totp?: string; recoveryCode?: string };
+      const body = request.body as LoginRequest;
       const record = repository.findAdminSecretByUsername(body.username);
       const passwordValid = record ? await verifyPassword(body.password, record.passwordHash) : false;
       if (!record || !passwordValid || record.status !== "active") {
@@ -104,16 +120,17 @@ export async function registerAuthentication(
         throw new AppError(401, ErrorCode.InvalidCredentials, "Invalid username or password");
       }
 
+      let totpVerified = false;
       if (record.totpEnabled) {
         if (!record.totpSecretEncrypted) {
           throw new AppError(500, ErrorCode.InternalError, "TOTP state is invalid");
         }
         const secret = decryptSecret(config.masterKey, `totp:${record.id}`, record.totpSecretEncrypted).toString("utf8");
-        const tokenValid = body.totp ? verifyTotp(secret, record.username, body.totp) : false;
-        const recoveryValid = !tokenValid && body.recoveryCode
+        totpVerified = body.totp ? verifyTotp(secret, record.username, body.totp) : false;
+        const recoveryValid = !totpVerified && body.recoveryCode
           ? repository.consumeRecoveryCode(record.id, body.recoveryCode)
           : false;
-        if (!tokenValid && !recoveryValid) {
+        if (!totpVerified && !recoveryValid) {
           repository.addAudit({
             adminId: record.id,
             action: "auth.login",
@@ -127,9 +144,34 @@ export async function registerAuthentication(
         }
       }
 
+      if (body.rememberDevice && (!record.totpEnabled || !totpVerified)) {
+        repository.addAudit({
+          adminId: record.id,
+          action: "auth.login",
+          targetType: "admin",
+          targetId: record.id,
+          result: "rejected",
+          errorCode: ErrorCode.RememberedSessionRequiresTotp,
+          remoteAddress: request.ip,
+        });
+        throw new AppError(403, ErrorCode.RememberedSessionRequiresTotp, "Remembered sessions require an enabled and verified TOTP code");
+      }
+
       const token = createSessionToken();
-      const expires = new Date(Date.now() + config.sessionTtlSeconds * 1000);
-      repository.createSession(record.id, token, expires.toISOString(), request.ip);
+      const remembered = body.rememberDevice === true;
+      const expires = new Date(Date.now() + (remembered ? config.rememberedSessionTtlSeconds : config.sessionTtlSeconds) * 1000);
+      const idleExpires = remembered
+        ? new Date(Math.min(expires.getTime(), Date.now() + config.rememberedSessionIdleTtlSeconds * 1000))
+        : null;
+      repository.createSession({
+        adminId: record.id,
+        token,
+        kind: remembered ? "remembered" : "short",
+        expiresAt: expires.toISOString(),
+        idleExpiresAt: idleExpires?.toISOString() ?? null,
+        remoteAddress: request.ip,
+        deviceLabel: body.deviceLabel ?? null,
+      });
       repository.updateAdminLogin(record.id);
       repository.addAudit({
         adminId: record.id,
@@ -159,9 +201,76 @@ export async function registerAuthentication(
     },
   );
 
+  app.get(
+    "/api/v1/auth/sessions",
+    {
+      preHandler: async (request) => requireAdmin(request),
+      schema: { tags: ["auth"], response: { 200: SessionListResponseSchema } },
+    },
+    async (request) => ({ items: repository.listSessions(request.admin!.id, request.sessionToken!) }),
+  );
+
+  app.delete(
+    "/api/v1/auth/sessions/:id",
+    {
+      preHandler: async (request) => requireAdmin(request),
+      config: { rateLimit: { max: 20, timeWindow: "1 minute" } },
+      schema: {
+        tags: ["auth"],
+        params: Type.Object({ id: UuidSchema }, { additionalProperties: false }),
+        headers: Type.Object({ "idempotency-key": OperationIdSchema }, { additionalProperties: true }),
+        response: { 200: SessionRevocationResponseSchema },
+      },
+    },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const op = operationId(request);
+      const scope = `auth.sessions.revoke:${request.admin!.id}`;
+      const start = repository.beginIdempotency(scope, op, requestFingerprint({ id }));
+      if (start === "conflict") throw new AppError(409, ErrorCode.IdempotencyConflict, "Idempotency key was already used");
+      let revoked = 0;
+      if (start === "repeat") revoked = Number(repository.idempotencyResult(scope, op)?.resultId ?? 0);
+      else {
+        revoked = repository.revokeSession(request.admin!.id, id);
+        repository.finishIdempotency(scope, op, "succeeded", String(revoked), null);
+        repository.addAudit({ adminId: request.admin!.id, action: "auth.session-revoked", targetType: "session", targetId: id,
+          operationId: op, result: "success", remoteAddress: request.ip, details: { revoked } });
+      }
+      const current = repository.getSession(request.sessionToken!);
+      if (!current) reply.clearCookie(SESSION_COOKIE, { path: "/" });
+      return { revoked };
+    },
+  );
+
+  app.post(
+    "/api/v1/auth/sessions/revoke-others",
+    {
+      preHandler: async (request) => requireAdmin(request),
+      config: { rateLimit: { max: 10, timeWindow: "1 minute" } },
+      schema: {
+        tags: ["auth"],
+        headers: Type.Object({ "idempotency-key": OperationIdSchema }, { additionalProperties: true }),
+        body: Type.Object({}, { additionalProperties: false }),
+        response: { 200: SessionRevocationResponseSchema },
+      },
+    },
+    async (request) => {
+      const op = operationId(request);
+      const scope = `auth.sessions.revoke-others:${request.admin!.id}`;
+      const start = repository.beginIdempotency(scope, op, requestFingerprint({ current: hashOpaque(request.sessionToken!) }));
+      if (start === "conflict") throw new AppError(409, ErrorCode.IdempotencyConflict, "Idempotency key was already used");
+      if (start === "repeat") return { revoked: Number(repository.idempotencyResult(scope, op)?.resultId ?? 0) };
+      const revoked = repository.revokeOtherSessions(request.admin!.id, request.sessionToken!);
+      repository.finishIdempotency(scope, op, "succeeded", String(revoked), null);
+      repository.addAudit({ adminId: request.admin!.id, action: "auth.sessions-revoked-others", targetType: "session",
+        operationId: op, result: "success", remoteAddress: request.ip, details: { revoked } });
+      return { revoked };
+    },
+  );
+
   app.post(
     "/api/v1/auth/totp/enroll",
-    { preHandler: requireAdmin, schema: { tags: ["auth"] } },
+    { preHandler: async (request) => requireAdmin(request), schema: { tags: ["auth"] } },
     async (request, reply) => {
       const secret = new OTPAuth.Secret({ size: 20 }).base32;
       repository.setPendingTotp(
@@ -176,7 +285,7 @@ export async function registerAuthentication(
   app.post(
     "/api/v1/auth/totp/confirm",
     {
-      preHandler: requireAdmin,
+      preHandler: async (request) => requireAdmin(request),
       schema: {
         tags: ["auth"],
         body: Type.Object({ token: Type.String({ minLength: 6, maxLength: 16 }) }, { additionalProperties: false }),

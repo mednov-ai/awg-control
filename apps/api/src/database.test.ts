@@ -22,7 +22,7 @@ describe("database migrations", () => {
     expect(tables.map(({ name }) => name)).toContain("audit_events");
     const columns = db.prepare("PRAGMA table_info(connections)").all() as Array<{ name: string }>;
     expect(columns.map(({ name }) => name)).toContain("quota_override_at");
-    expect(db.prepare("SELECT MAX(version) AS version FROM schema_migrations").get()).toMatchObject({ version: 3 });
+    expect(db.prepare("SELECT MAX(version) AS version FROM schema_migrations").get()).toMatchObject({ version: 4 });
     const instanceColumns = db.prepare("PRAGMA table_info(instances)").all() as Array<{ name: string }>;
     expect(instanceColumns.map(({ name }) => name)).toContain("protocol_version");
     expect(db.pragma("foreign_keys", { simple: true })).toBe(1);
@@ -67,6 +67,33 @@ describe("database migrations", () => {
     expect(db.prepare("SELECT instance_id FROM connections WHERE id = ?").get("connection-1"))
       .toMatchObject({ instance_id: "instance-1" });
     expect(db.prepare("PRAGMA foreign_key_check").all()).toEqual([]);
+    expect(readdirSync(directory).some((name) => name.includes(".pre-migration-") && name.endsWith(".backup"))).toBe(true);
+    db.close();
+  });
+
+  it("migrates v3 sessions as valid short sessions and preserves their admin relation", () => {
+    const directory = mkdtempSync(join(tmpdir(), "awg-control-session-upgrade-"));
+    temporaryDirectories.push(directory);
+    const migrations = new URL("../migrations", import.meta.url).pathname;
+    const oldMigrations = join(directory, "v3-migrations");
+    const databasePath = join(directory, "upgrade.db");
+    mkdirSync(oldMigrations);
+    for (const name of ["0001_initial.sql", "0002_quota_override.sql", "0003_awg3_protocol_version.sql"]) {
+      copyFileSync(join(migrations, name), join(oldMigrations, name));
+    }
+    const oldDb = openDatabase(databasePath, oldMigrations);
+    const now = "2026-09-09T00:00:00.000Z";
+    oldDb.prepare("INSERT INTO admins(id, username, password_hash, created_at, updated_at) VALUES (?, ?, ?, ?, ?)")
+      .run("018bcfe5-6800-7000-8000-000000000001", "operator", "hash", now, now);
+    oldDb.prepare(`INSERT INTO sessions(id_hash, admin_id, expires_at, created_at, last_seen_at, remote_address)
+      VALUES (?, ?, ?, ?, ?, ?)`).run("opaque-hash", "018bcfe5-6800-7000-8000-000000000001", "2026-09-10T00:00:00.000Z", now, now, "127.0.0.1");
+    oldDb.close();
+
+    const db = openDatabase(databasePath, migrations);
+    const row = db.prepare("SELECT public_id, admin_id, session_kind, expires_at, idle_expires_at FROM sessions").get() as Record<string, unknown>;
+    expect(row).toMatchObject({ admin_id: "018bcfe5-6800-7000-8000-000000000001", session_kind: "short", expires_at: "2026-09-10T00:00:00.000Z", idle_expires_at: null });
+    expect(String(row.public_id)).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+    expect(db.pragma("foreign_key_check")).toEqual([]);
     expect(readdirSync(directory).some((name) => name.includes(".pre-migration-") && name.endsWith(".backup"))).toBe(true);
     db.close();
   });

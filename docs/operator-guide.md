@@ -10,11 +10,24 @@ openssl rand -out deploy/compose/secrets/master-key 32
 chmod 0600 deploy/compose/secrets/master-key
 ```
 
-Set `AWG_CONTROL_VERSION` to the verified v1 release tag and
-`AWG_CONTROL_PUBLIC_ORIGIN` to the authenticated HTTPS origin, then start the
+Set `AWG_CONTROL_VERSION` to the verified release tag and
+`AWG_CONTROL_PUBLIC_ORIGIN=https://awg.play-and-say.ru`, then start the
 Compose project. The published socket remains `127.0.0.1:8080`; terminate TLS in
 an existing nginx, Caddy, or Traefik configuration. Do not expose port 8080
 directly to the Internet.
+
+Copy `deploy/compose/.env.example` outside the repository and keep the master
+key file mode at `0600`. Short sessions default to 12 hours. Remembered sessions
+default to 30 days absolute and 7 days idle, with activity persisted at most
+every 5 minutes. Production trusts one proxy hop because the Docker-published
+port is reachable only from loopback nginx; never combine this setting with a
+public `8080` bind.
+
+Use `deploy/nginx/awg.play-and-say.ru.conf` as a reviewed template for a new,
+dedicated file. It must not replace or edit the existing `play-and-say.ru`
+server block. Obtain explicit approval before certificate issuance, enabling
+the symlink, or reloading nginx. Validate Panel readiness locally first, then
+run `nginx -t` before any reload.
 
 Create the first administrator without placing its password in argv or shell
 history:
@@ -82,6 +95,13 @@ Back up the external master key separately. Before upgrade, verify artifact
 signatures, update compatible Helpers first, update the Panel image tag, and
 check readiness plus read-only discovery. Panel supports the current and one
 previous Helper minor protocol after such a minor exists.
+
+The session schema migration creates its own pre-migration SQLite backup. Keep
+that backup with the exact previous image digest. To roll back, disable only
+the `awg.play-and-say.ru` nginx symlink, validate and reload nginx, stop Panel,
+restore the pre-migration database backup, and start the matching prior image.
+Do not downgrade a migrated database in place. This process must not remove the
+Helper, stop Docker, or change Amnezia containers or peers.
 
 ## Key rotation
 

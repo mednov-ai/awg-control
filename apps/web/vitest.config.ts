@@ -5,7 +5,7 @@ export default defineConfig({
   plugins: [react()],
   test: {
     environment: "jsdom",
+    environmentOptions: { jsdom: { url: "https://panel.example/" } },
     setupFiles: ["./src/test/setup.ts"],
   },
 });
-

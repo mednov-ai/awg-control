@@ -1,5 +1,6 @@
 import type {
   Admin,
+  AdminSession,
   Connection,
   InstanceRecord,
   NodeRecord,
@@ -38,10 +39,11 @@ function idempotency(): string {
 export const api = {
   bootstrap: () => request<{ required: boolean }>("/auth/bootstrap"),
   me: () => request<{ admin: Admin }>("/auth/me"),
-  login: (username: string, password: string, totp?: string) =>
+  login: (username: string, password: string, options?: { totp?: string; rememberDevice?: boolean; deviceLabel?: string }) =>
     request<{ admin: Admin }>("/auth/login", {
       method: "POST",
-      body: JSON.stringify({ username, password, ...(totp ? { totp } : {}) }),
+      body: JSON.stringify({ username, password, ...(options?.totp ? { totp: options.totp } : {}),
+        ...(options?.rememberDevice ? { rememberDevice: true, deviceLabel: options.deviceLabel } : {}) }),
     }),
   logout: () => request<void>("/auth/logout", { method: "POST" }),
   dashboard: () => request<Record<string, unknown>>("/dashboard"),
@@ -119,4 +121,11 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ token }),
     }),
+  sessions: () => request<{ items: AdminSession[] }>("/auth/sessions"),
+  revokeSession: (id: string) => request<{ revoked: number }>(`/auth/sessions/${encodeURIComponent(id)}`, {
+    method: "DELETE", headers: { "Idempotency-Key": idempotency() },
+  }),
+  revokeOtherSessions: () => request<{ revoked: number }>("/auth/sessions/revoke-others", {
+    method: "POST", headers: { "Idempotency-Key": idempotency() }, body: JSON.stringify({}),
+  }),
 };

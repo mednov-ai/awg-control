@@ -1,4 +1,4 @@
-import type { Admin, Connection, InstanceRecord, NodeRecord, QuotaPolicy, VpnUser } from "@awg-control/contracts";
+import type { Admin, AdminSession, Connection, InstanceRecord, NodeRecord, QuotaPolicy, SessionKind, VpnUser } from "@awg-control/contracts";
 
 import type { SqliteDatabase } from "./database.js";
 import { utcNow, uuidv7 } from "./lib/ids.js";
@@ -8,6 +8,14 @@ type Row = Record<string, unknown>;
 
 function stringOrNull(value: unknown): string | null {
   return typeof value === "string" ? value : null;
+}
+
+function redactAddress(value: unknown): string | null {
+  const address = stringOrNull(value);
+  if (!address) return null;
+  if (address.includes(":")) return `${address.split(":").slice(0, 3).join(":")}:…`;
+  const parts = address.split(".");
+  return parts.length === 4 ? `${parts.slice(0, 3).join(".")}.xxx` : "redacted";
 }
 
 function toAdmin(row: Row): Admin {
@@ -117,7 +125,10 @@ export interface AdminSecretRecord {
 
 export interface SessionRecord {
   admin: Admin;
+  publicId: string;
+  kind: SessionKind;
   expiresAt: string;
+  idleExpiresAt: string | null;
   pendingTotpSecretEncrypted: string | null;
 }
 
@@ -218,38 +229,100 @@ export class Repository {
     return result.changes === 1;
   }
 
-  public createSession(adminId: string, token: string, expiresAt: string, remoteAddress: string | null): void {
-    const now = utcNow();
+  public createSession(input: {
+    adminId: string;
+    token: string;
+    kind: SessionKind;
+    expiresAt: string;
+    idleExpiresAt: string | null;
+    remoteAddress: string | null;
+    deviceLabel: string | null;
+    now?: string;
+  }): string {
+    const now = input.now ?? utcNow();
+    const publicId = uuidv7(new Date(now).getTime());
     this.db
       .prepare(
-        `INSERT INTO sessions(id_hash, admin_id, expires_at, created_at, last_seen_at, remote_address)
-         VALUES (?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO sessions(
+           id_hash, public_id, admin_id, session_kind, expires_at, idle_expires_at,
+           created_at, last_seen_at, remote_address, device_label
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
-      .run(hashOpaque(token), adminId, expiresAt, now, now, remoteAddress);
+      .run(hashOpaque(input.token), publicId, input.adminId, input.kind, input.expiresAt, input.idleExpiresAt,
+        now, now, input.remoteAddress, input.deviceLabel);
+    return publicId;
   }
 
-  public getSession(token: string): SessionRecord | null {
+  public getSession(token: string, now = utcNow()): SessionRecord | null {
     const row = this.db
       .prepare(
-        `SELECT s.expires_at, s.pending_totp_secret_encrypted, a.*
+        `SELECT s.public_id, s.session_kind, s.expires_at, s.idle_expires_at,
+                s.pending_totp_secret_encrypted, a.*
          FROM sessions s JOIN admins a ON a.id = s.admin_id
-         WHERE s.id_hash = ? AND s.expires_at > ? AND a.status = 'active'`,
+         WHERE s.id_hash = ? AND s.revoked_at IS NULL AND s.expires_at > ?
+           AND (s.idle_expires_at IS NULL OR s.idle_expires_at > ?)
+           AND a.status = 'active'`,
       )
-      .get(hashOpaque(token), utcNow()) as Row | undefined;
+      .get(hashOpaque(token), now, now) as Row | undefined;
     if (!row) return null;
     return {
       admin: toAdmin(row),
+      publicId: String(row.public_id),
+      kind: row.session_kind as SessionKind,
       expiresAt: String(row.expires_at),
+      idleExpiresAt: stringOrNull(row.idle_expires_at),
       pendingTotpSecretEncrypted: stringOrNull(row.pending_totp_secret_encrypted),
     };
   }
 
-  public touchSession(token: string): void {
-    this.db.prepare("UPDATE sessions SET last_seen_at = ? WHERE id_hash = ?").run(utcNow(), hashOpaque(token));
+  public touchSession(token: string, idleTtlSeconds: number, writeIntervalSeconds: number, now = utcNow()): void {
+    const threshold = new Date(new Date(now).getTime() - writeIntervalSeconds * 1000).toISOString();
+    const idle = new Date(new Date(now).getTime() + idleTtlSeconds * 1000).toISOString();
+    this.db.prepare(
+      `UPDATE sessions
+       SET last_seen_at = ?, idle_expires_at = CASE WHEN ? < expires_at THEN ? ELSE expires_at END
+       WHERE id_hash = ? AND session_kind = 'remembered' AND revoked_at IS NULL
+         AND last_seen_at <= ? AND expires_at > ? AND idle_expires_at > ?`,
+    ).run(now, idle, idle, hashOpaque(token), threshold, now, now);
   }
 
   public deleteSession(token: string): void {
     this.db.prepare("DELETE FROM sessions WHERE id_hash = ?").run(hashOpaque(token));
+  }
+
+  public listSessions(adminId: string, currentToken: string, now = utcNow()): AdminSession[] {
+    const currentHash = hashOpaque(currentToken);
+    const rows = this.db.prepare(
+      `SELECT public_id, id_hash, session_kind, device_label, created_at, last_seen_at,
+              expires_at, idle_expires_at, remote_address
+       FROM sessions
+       WHERE admin_id = ? AND revoked_at IS NULL AND expires_at > ?
+         AND (idle_expires_at IS NULL OR idle_expires_at > ?)
+       ORDER BY last_seen_at DESC`,
+    ).all(adminId, now, now) as Row[];
+    return rows.map((row) => ({
+      id: String(row.public_id),
+      kind: row.session_kind as SessionKind,
+      current: String(row.id_hash) === currentHash,
+      deviceLabel: stringOrNull(row.device_label),
+      createdAt: String(row.created_at),
+      lastSeenAt: String(row.last_seen_at),
+      expiresAt: String(row.expires_at),
+      idleExpiresAt: stringOrNull(row.idle_expires_at),
+      remoteAddress: redactAddress(row.remote_address),
+    }));
+  }
+
+  public revokeSession(adminId: string, publicId: string, now = utcNow()): number {
+    return this.db.prepare(
+      "UPDATE sessions SET revoked_at = ? WHERE admin_id = ? AND public_id = ? AND revoked_at IS NULL",
+    ).run(now, adminId, publicId).changes;
+  }
+
+  public revokeOtherSessions(adminId: string, currentToken: string, now = utcNow()): number {
+    return this.db.prepare(
+      "UPDATE sessions SET revoked_at = ? WHERE admin_id = ? AND id_hash <> ? AND revoked_at IS NULL",
+    ).run(now, adminId, hashOpaque(currentToken)).changes;
   }
 
   public setPendingTotp(token: string, encryptedSecret: string | null): void {
@@ -258,8 +331,12 @@ export class Repository {
       .run(encryptedSecret, hashOpaque(token));
   }
 
-  public pruneSessions(): void {
-    this.db.prepare("DELETE FROM sessions WHERE expires_at <= ?").run(utcNow());
+  public pruneSessions(now = utcNow()): void {
+    const revokedBefore = new Date(new Date(now).getTime() - 7 * 86_400_000).toISOString();
+    this.db.prepare(
+      `DELETE FROM sessions WHERE expires_at <= ? OR (idle_expires_at IS NOT NULL AND idle_expires_at <= ?)
+       OR (revoked_at IS NOT NULL AND revoked_at <= ?)`,
+    ).run(now, now, revokedBefore);
   }
 
   public createNode(input: {
