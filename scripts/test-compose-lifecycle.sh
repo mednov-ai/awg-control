@@ -8,11 +8,17 @@ TEST_DIR="$(mktemp -d)"
 MASTER_KEY_PATH="$TEST_DIR/master-key"
 
 cleanup() {
+  local status="$?"
+  if [[ "$status" -ne 0 ]]; then
+    docker compose --project-name "$PROJECT_NAME" -f "$COMPOSE_FILE" ps || true
+    docker compose --project-name "$PROJECT_NAME" -f "$COMPOSE_FILE" logs --no-color --tail 40 panel || true
+  fi
   AWG_CONTROL_VERSION="compose-test-upgrade" \
   AWG_CONTROL_PUBLIC_ORIGIN="https://panel.example" \
   AWG_CONTROL_MASTER_KEY_PATH="$MASTER_KEY_PATH" \
     docker compose --project-name "$PROJECT_NAME" -f "$COMPOSE_FILE" down --volumes --remove-orphans >/dev/null 2>&1 || true
   rm -rf "$TEST_DIR"
+  return "$status"
 }
 trap cleanup EXIT
 
