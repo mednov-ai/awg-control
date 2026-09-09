@@ -52,7 +52,7 @@ curl --fail --silent http://127.0.0.1:8080/api/v1/health/live >/dev/null
 docker tag "$SOURCE_IMAGE" ghcr.io/mednov-ai/awg-control:compose-test-upgrade
 export AWG_CONTROL_VERSION="compose-test-upgrade"
 docker compose --project-name "$PROJECT_NAME" -f "$COMPOSE_FILE" up --detach
-curl --retry 20 --retry-delay 1 --retry-connrefused --fail --silent \
+curl --retry 20 --retry-delay 1 --retry-connrefused --retry-all-errors --fail --silent \
   http://127.0.0.1:8080/api/v1/health/live >/dev/null
 
 docker compose --project-name "$PROJECT_NAME" -f "$COMPOSE_FILE" down --volumes --remove-orphans
