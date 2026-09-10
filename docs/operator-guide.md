@@ -33,7 +33,10 @@ Use `deploy/nginx/awg.play-and-say.ru.conf` as a reviewed template for a new,
 dedicated file. It must not replace or edit the existing `play-and-say.ru`
 server block. Obtain explicit approval before certificate issuance, enabling
 the symlink, or reloading nginx. Validate Panel readiness locally first, then
-run `nginx -t` before any reload.
+run `nginx -t` before any reload. Keep `/var/www/awg-control-acme` available as
+the dedicated webroot used by both initial issuance and unattended renewal;
+the HTTP virtual host serves only that challenge path before redirecting other
+requests to HTTPS.
 
 Create the first administrator without placing its password in argv or shell
 history:

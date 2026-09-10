@@ -97,18 +97,19 @@ Transport private keys used by Panel to reach Nodes are a separate secret class.
 
 ## Play&Say Pilot Server
 
-These facts were verified read-only on 2026-07-16. Recheck them before every pilot or operational change because server state can change.
+These facts were verified read-only on 2026-09-10. Recheck them before every pilot or operational change because server state can change.
 
 | Item | Verified value |
 | --- | --- |
 | Public domain | `play-and-say.ru` |
-| Current DNS A record | `89.124.113.223` |
-| SSH target | `root@89.124.113.223` |
-| Hostname | `v646888.hosted-by-vdsina.com` |
-| Host services | `nginx`, `docker`, `k3s` active |
-| Legacy container | `amnezia-awg`, image `amnezia-awg`, UDP `31119` |
-| AWG2 container | `amnezia-awg2`, image `amnezia-awg2`, UDP `41016` |
-| Container mounts | Only `/lib/modules:/lib/modules` was present on both AWG containers |
+| Panel domain | `awg.play-and-say.ru` |
+| Current DNS A record | `89.124.107.104` for both domains |
+| SSH target | `root@89.124.107.104` |
+| Hostname | `v842934.hosted-by-vdsina.com` |
+| Host services | `nginx` and `docker` active; `k3s` intentionally inactive |
+| AWG2 container | `amnezia-awg2`, image `amnezia-awg2`, UDP `38829` |
+| AWG 3.1 container | `amnezia-awg3`, image `awg-control-awg31:3.1.20260814-20260812`, UDP `47300` |
+| Container mounts | AWG2: `/lib/modules:/lib/modules`; AWG 3.1: `/opt/amnezia/awg31:/opt/amnezia/awg` |
 
 The checked runtime and the current Play&Say runbook/DNS are authoritative for the pilot. If any older note contains another VPS address, do not use it without a new DNS and SSH verification.
 
@@ -117,9 +118,9 @@ The checked runtime and the current Play&Say runbook/DNS are authoritative for t
 Use the existing operator key only for explicit bootstrap or diagnostics:
 
 ```bash
-ssh -i /Users/evgeniymednov/.ssh/play_and_say_vps_ed25519 \
+ssh -i /Users/evgeniymednov/.ssh/amnezia_89_124_107_104_ed25519 \
   -o IdentitiesOnly=yes \
-  root@89.124.113.223
+  root@89.124.107.104
 ```
 
 Do not copy this private key into AWG Control, a container, CI, the repository, logs, or chat. Production Panel runtime must use its own restricted key and the `awg-control-agent` forced-command account described in `spec.md`; it must never reuse the root operator key.
@@ -135,9 +136,9 @@ dig +short A play-and-say.ru
 ```
 
 ```bash
-ssh -i /Users/evgeniymednov/.ssh/play_and_say_vps_ed25519 \
+ssh -i /Users/evgeniymednov/.ssh/amnezia_89_124_107_104_ed25519 \
   -o IdentitiesOnly=yes \
-  root@89.124.113.223 \
+  root@89.124.107.104 \
   'hostname; systemctl is-active nginx docker k3s; docker ps --format "{{.Names}}|{{.Image}}|{{.Ports}}"'
 ```
 
