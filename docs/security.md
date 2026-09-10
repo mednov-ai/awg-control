@@ -24,9 +24,10 @@ secrets in logs or support bundles.
 
 ## Node protections
 
-The installer creates `awg-control-agent` without a password or interactive
-shell. Its authorized key has `restrict` and a forced command. The sudo rule
-permits only `/usr/local/sbin/awgctl ssh-rpc`. PTY, forwarding, X11, agent
+The installer creates `awg-control-agent` without a password. OpenSSH needs its
+`/bin/sh` login shell to launch the forced command, but the account has no
+interactive shell access: its only authorized key has `restrict` and a forced
+command. The sudo rule permits only `/usr/local/sbin/awgctl ssh-rpc`. PTY, forwarding, X11, agent
 forwarding, user rc, arbitrary commands, container names, and arbitrary paths
 are unavailable at the RPC boundary.
 
@@ -41,4 +42,3 @@ Unknown configuration structures disable mutation capabilities.
 4. Do not attach database backups without separately protecting the master key.
 5. If a one-time config was exposed, create a replacement Connection and revoke
    the old one; it cannot be reissued.
-

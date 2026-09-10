@@ -398,7 +398,7 @@ Production Panel публикуется на отдельном origin `https://
 Bootstrap выполняется оператором с существующим административным доступом. Runtime-доступ панели создаётся отдельно:
 
 1. Root-owned helper устанавливается как `/usr/local/sbin/awgctl`.
-2. Создаётся системный пользователь `awg-control-agent` без пароля и интерактивного shell.
+2. Создаётся системный пользователь `awg-control-agent` без пароля. Его login shell `/bin/sh` нужен OpenSSH для запуска forced-command, но интерактивный shell недоступен: единственный authorized key имеет `restrict` и принудительно запускает только Helper RPC.
 3. В `authorized_keys` добавляется отдельный public key панели с `restrict` и forced command `sudo -n /usr/local/sbin/awgctl ssh-rpc`.
 4. `sudoers` разрешает этому пользователю только указанную команду без произвольных аргументов/shell.
 5. Panel закрепляет SSH host key fingerprint при регистрации Node; несовпадение блокирует соединение.

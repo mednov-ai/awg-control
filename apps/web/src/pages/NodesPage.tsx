@@ -31,9 +31,10 @@ export default function NodesPage() {
 
   const create = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    const form = event.currentTarget;
     setPending(true);
     setError("");
-    const data = new FormData(event.currentTarget);
+    const data = new FormData(form);
     try {
       await api.createNode({
         name: String(data.get("name")),
@@ -41,7 +42,7 @@ export default function NodesPage() {
         hostKeyFingerprint: String(data.get("hostKeyFingerprint")),
         transportPrivateKey: String(data.get("transportPrivateKey")),
       });
-      event.currentTarget.reset();
+      form.reset();
       setShowForm(false);
       await queryClient.invalidateQueries({ queryKey: ["nodes"] });
     } catch (caught) {

@@ -83,8 +83,9 @@ command -v systemctl >/dev/null || { echo "systemd is required." >&2; exit 1; }
 command -v visudo >/dev/null || { echo "visudo is required." >&2; exit 1; }
 
 if ! id awg-control-agent >/dev/null 2>&1; then
-  useradd --system --home-dir "$AGENT_HOME" --create-home --shell /usr/sbin/nologin awg-control-agent
+  useradd --system --home-dir "$AGENT_HOME" --create-home --shell /bin/sh awg-control-agent
 fi
+usermod --shell /bin/sh awg-control-agent
 install -o root -g root -m 0755 "$BINARY" /usr/local/sbin/awgctl
 install -d -o root -g root -m 0700 "$STATE_DIR"
 install -d -o awg-control-agent -g awg-control-agent -m 0700 "$AGENT_HOME/.ssh"
@@ -106,4 +107,3 @@ systemctl daemon-reload
 systemctl enable --now awg-control-enforce.timer
 /usr/local/sbin/awgctl health >/dev/null
 echo "Helper installed without restarting Docker or Amnezia containers."
-
