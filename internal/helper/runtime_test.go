@@ -2,6 +2,7 @@ package helper
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -10,12 +11,58 @@ import (
 )
 
 type recordingRunner struct {
-	calls [][]string
+	calls         [][]string
+	failFirstSync bool
+	syncCalls     int
 }
 
 func (r *recordingRunner) Run(_ context.Context, name string, args []string, _ []byte, _ int) ([]byte, error) {
 	r.calls = append(r.calls, append([]string{name}, args...))
+	if len(args) >= 7 && args[0] == "exec" && args[3] == "stat" {
+		return []byte("600:0:0\n"), nil
+	}
+	if len(args) >= 7 && args[0] == "exec" && args[3] == "awg" && args[4] == "syncconf" {
+		r.syncCalls++
+		if r.failFirstSync && r.syncCalls == 1 {
+			return nil, errors.New("fixture apply failure")
+		}
+	}
 	return []byte(fixturePublicKey + "\n"), nil
+}
+
+func TestRollbackUsesBusyBoxCompatibleMetadata(t *testing.T) {
+	runner := &recordingRunner{failFirstSync: true}
+	runtime := &DockerRuntime{runner: runner}
+	instance := Instance{
+		ID: "018bcfe5-6800-7000-8000-000000000000", ContainerID: strings.Repeat("a", 64),
+		InterfaceName: "awg0", ConfigPath: "/config/awg0.conf", Binary: "awg",
+	}
+	err := runtime.Apply(instance, "018bcfe5-6800-7000-8000-000000000001", []byte("original"), []byte("updated"), fixturePublicKey, true)
+	if err == nil || err.Error() != "apply failed; original configuration restored" {
+		t.Fatalf("expected successful rollback after apply failure, got %v", err)
+	}
+	chmodCalls := 0
+	chownCalls := 0
+	for _, call := range runner.calls {
+		if len(call) < 7 {
+			continue
+		}
+		switch call[4] {
+		case "chmod":
+			chmodCalls++
+			if call[5] != "600" || strings.Contains(call[5], "--reference") {
+				t.Fatalf("rollback mode must be BusyBox-compatible, got %#v", call)
+			}
+		case "chown":
+			chownCalls++
+			if call[5] != "0:0" || strings.Contains(call[5], "--reference") {
+				t.Fatalf("rollback ownership must be BusyBox-compatible, got %#v", call)
+			}
+		}
+	}
+	if chmodCalls != 2 || chownCalls != 2 || runner.syncCalls != 2 {
+		t.Fatalf("expected apply and rollback metadata/sync calls, got chmod=%d chown=%d sync=%d", chmodCalls, chownCalls, runner.syncCalls)
+	}
 }
 
 func parseProfile(t *testing.T, binaryName, config string) (adapterProfile, map[string]string) {
@@ -126,6 +173,8 @@ func TestApplyValidatesInterfaceNamedConfiguration(t *testing.T) {
 		t.Fatal(err)
 	}
 	foundStrip := false
+	foundMode := false
+	foundOwner := false
 	for _, call := range runner.calls {
 		if len(call) >= 7 && call[0] == "docker" && call[1] == "exec" && call[4] == "awg-quick" && call[5] == "strip" {
 			foundStrip = true
@@ -136,8 +185,43 @@ func TestApplyValidatesInterfaceNamedConfiguration(t *testing.T) {
 				t.Fatalf("operation isolation requires a dedicated temporary directory, got %q", call[6])
 			}
 		}
+		if len(call) >= 7 && call[4] == "chmod" {
+			foundMode = true
+			if call[5] != "600" || strings.Contains(call[5], "--reference") {
+				t.Fatalf("configuration mode must use validated numeric metadata, got %#v", call)
+			}
+		}
+		if len(call) >= 7 && call[4] == "chown" {
+			foundOwner = true
+			if call[5] != "0:0" || strings.Contains(call[5], "--reference") {
+				t.Fatalf("configuration ownership must use validated numeric metadata, got %#v", call)
+			}
+		}
 	}
 	if !foundStrip {
 		t.Fatal("missing awg-quick strip call")
 	}
+	if !foundMode || !foundOwner {
+		t.Fatal("missing numeric configuration metadata preservation")
+	}
+}
+
+func TestConfigurationMetadataRejectsUnsafeValues(t *testing.T) {
+	for _, value := range []string{"", "600:root:root", "600:0:0:0", "u+s:0:0", "600:0;id:0"} {
+		runner := &recordingRunner{}
+		runner.calls = nil
+		runtime := &DockerRuntime{runner: commandOutputRunner{output: []byte(value)}}
+		instance := Instance{ContainerID: strings.Repeat("a", 64), ConfigPath: "/config/awg0.conf"}
+		if _, _, err := runtime.configurationMetadata(instance); err == nil {
+			t.Fatalf("expected unsafe metadata %q to be rejected", value)
+		}
+	}
+}
+
+type commandOutputRunner struct {
+	output []byte
+}
+
+func (r commandOutputRunner) Run(_ context.Context, _ string, _ []string, _ []byte, _ int) ([]byte, error) {
+	return r.output, nil
 }

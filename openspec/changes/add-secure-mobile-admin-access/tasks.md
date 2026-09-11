@@ -37,6 +37,7 @@
 - [x] 5.5 Remove manual VPN CIDR from Web/API connection issuance and implement atomic Helper allocation from the selected Instance IPv4 subnet with stable fail-closed errors.
 - [x] 5.6 Add parser/helper/API/UI tests for occupied ranges, exhausted or ambiguous pools, rollback, request-field rejection, localization, and narrow-screen issuance.
 - [x] 5.7 Preserve the `<interface>.conf` basename in isolated Helper apply/rollback workspaces and add an AWG 3.1 adapter-validation regression test.
+- [x] 5.8 Replace GNU-only configuration metadata preservation with strictly validated BusyBox-compatible numeric mode/owner handling for apply and rollback.
 
 ## 6. Verification and staged rollout
 

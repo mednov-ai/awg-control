@@ -365,6 +365,9 @@ Request создания Connection содержит Instance, имя устро
 каталога операции, но сохраняет basename `<interface>.conf`: AWG 3.1 отвергает
 иначе корректный файл, если его имя не совпадает с именем интерфейса. Временный
 каталог имеет mode `0700` и удаляется после apply или rollback.
+Права исходного config переносятся без GNU `--reference`: Helper читает только
+числовые `mode:uid:gid` через `stat`, строго валидирует их и передаёт числовые
+аргументы в BusyBox-совместимые `chmod`/`chown` для apply и rollback.
 
 ## 14. Helper RPC
 
@@ -573,6 +576,8 @@ GitHub Actions должен выполнять:
 - syntax failure и полный rollback;
 - AWG 3.1 validation использует interface-named temporary config внутри
   изолированного каталога операции;
+- сохранение mode/owner конфигурации проверяется с BusyBox-совместимыми
+  числовыми metadata и fail-closed разбором;
 - недоступный Panel при локальном `awgctl enforce`;
 - helper/API version negotiation;
 - SQLite backup/migration/restore.

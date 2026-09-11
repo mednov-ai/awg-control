@@ -45,3 +45,8 @@ directory while preserving the adapter-required `<interface>.conf` basename.
 
 - **WHEN** Helper prepares an AWG 3.1 configuration containing the allocated peer
 - **THEN** `awg-quick strip` receives a file named for the selected interface, validation succeeds, and concurrent operations retain separate temporary paths
+
+#### Scenario: BusyBox preserves configuration metadata
+
+- **WHEN** the AWG 3.1 container does not implement GNU `chmod --reference` or `chown --reference`
+- **THEN** Helper reads strictly validated numeric mode, uid, and gid metadata and preserves them with BusyBox-compatible arguments for both apply and rollback

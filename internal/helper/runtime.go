@@ -27,6 +27,8 @@ const maxCommandOutput = 16 * 1024 * 1024
 var (
 	containerIDPattern = regexp.MustCompile(`^[a-f0-9]{12,64}$`)
 	interfacePattern   = regexp.MustCompile(`^[A-Za-z0-9_=+.-]{1,32}$`)
+	fileModePattern    = regexp.MustCompile(`^[0-7]{3,4}$`)
+	numericIDPattern   = regexp.MustCompile(`^(0|[1-9][0-9]{0,9})$`)
 )
 
 type commandRunner interface {
@@ -412,6 +414,10 @@ func (r *DockerRuntime) Apply(instance Instance, operationID string, original, u
 	if !validInstance(instance) || !safeID(operationID) {
 		return errors.New("invalid transaction metadata")
 	}
+	mode, owner, err := r.configurationMetadata(instance)
+	if err != nil {
+		return err
+	}
 	remoteDir, remoteNew, remoteStripped := transactionPaths("awg-control-", operationID, instance.InterfaceName)
 	cleanup := func() {
 		_, _ = r.exec(instance.ContainerID, "rm", "-f", remoteNew, remoteStripped)
@@ -431,24 +437,24 @@ func (r *DockerRuntime) Apply(instance Instance, operationID string, original, u
 	if err := r.copyTo(instance.ContainerID, remoteStripped, stripped); err != nil {
 		return err
 	}
-	if _, err := r.exec(instance.ContainerID, "chmod", "--reference="+instance.ConfigPath, remoteNew); err != nil {
+	if _, err := r.exec(instance.ContainerID, "chmod", mode, remoteNew); err != nil {
 		return errors.New("preserve configuration mode failed")
 	}
-	if _, err := r.exec(instance.ContainerID, "chown", "--reference="+instance.ConfigPath, remoteNew); err != nil {
+	if _, err := r.exec(instance.ContainerID, "chown", owner, remoteNew); err != nil {
 		return errors.New("preserve configuration ownership failed")
 	}
 	if _, err := r.exec(instance.ContainerID, "mv", "-f", remoteNew, instance.ConfigPath); err != nil {
 		return errors.New("atomic configuration replace failed")
 	}
 	if _, err := r.exec(instance.ContainerID, instance.Binary, "syncconf", instance.InterfaceName, remoteStripped); err != nil {
-		if rollbackErr := r.rollback(instance, operationID, original); rollbackErr != nil {
+		if rollbackErr := r.rollback(instance, operationID, original, mode, owner); rollbackErr != nil {
 			return errors.New("apply and rollback failed")
 		}
 		return errors.New("apply failed; original configuration restored")
 	}
 	peers, err := r.exec(instance.ContainerID, instance.Binary, "show", instance.InterfaceName, "peers")
 	if err != nil || containsKey(string(peers), expectedPublicKey) != shouldExist {
-		if rollbackErr := r.rollback(instance, operationID, original); rollbackErr != nil {
+		if rollbackErr := r.rollback(instance, operationID, original, mode, owner); rollbackErr != nil {
 			return errors.New("verification and rollback failed")
 		}
 		return errors.New("verification failed; original configuration restored")
@@ -456,7 +462,7 @@ func (r *DockerRuntime) Apply(instance Instance, operationID string, original, u
 	return nil
 }
 
-func (r *DockerRuntime) rollback(instance Instance, operationID string, original []byte) error {
+func (r *DockerRuntime) rollback(instance Instance, operationID string, original []byte, mode, owner string) error {
 	remoteDir, remoteOriginal, remoteStripped := transactionPaths("awg-control-rollback-", operationID, instance.InterfaceName)
 	defer func() {
 		_, _ = r.exec(instance.ContainerID, "rm", "-f", remoteOriginal, remoteStripped)
@@ -475,10 +481,10 @@ func (r *DockerRuntime) rollback(instance Instance, operationID string, original
 	if err := r.copyTo(instance.ContainerID, remoteStripped, stripped); err != nil {
 		return err
 	}
-	if _, err := r.exec(instance.ContainerID, "chmod", "--reference="+instance.ConfigPath, remoteOriginal); err != nil {
+	if _, err := r.exec(instance.ContainerID, "chmod", mode, remoteOriginal); err != nil {
 		return errors.New("preserve rollback configuration mode failed")
 	}
-	if _, err := r.exec(instance.ContainerID, "chown", "--reference="+instance.ConfigPath, remoteOriginal); err != nil {
+	if _, err := r.exec(instance.ContainerID, "chown", owner, remoteOriginal); err != nil {
 		return errors.New("preserve rollback configuration ownership failed")
 	}
 	if _, err := r.exec(instance.ContainerID, "mv", "-f", remoteOriginal, instance.ConfigPath); err != nil {
@@ -486,6 +492,18 @@ func (r *DockerRuntime) rollback(instance Instance, operationID string, original
 	}
 	_, err = r.exec(instance.ContainerID, instance.Binary, "syncconf", instance.InterfaceName, remoteStripped)
 	return err
+}
+
+func (r *DockerRuntime) configurationMetadata(instance Instance) (mode, owner string, err error) {
+	data, err := r.exec(instance.ContainerID, "stat", "-c", "%a:%u:%g", instance.ConfigPath)
+	if err != nil {
+		return "", "", errors.New("read configuration metadata failed")
+	}
+	parts := strings.Split(strings.TrimSpace(string(data)), ":")
+	if len(parts) != 3 || !fileModePattern.MatchString(parts[0]) || !numericIDPattern.MatchString(parts[1]) || !numericIDPattern.MatchString(parts[2]) {
+		return "", "", errors.New("configuration metadata is invalid")
+	}
+	return parts[0], parts[1] + ":" + parts[2], nil
 }
 
 func (r *DockerRuntime) copyTo(containerID, remotePath string, data []byte) error {
