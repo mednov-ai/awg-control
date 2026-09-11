@@ -361,6 +361,10 @@ Request создания Connection содержит Instance, имя устро
 квоту, но не содержит `addressCidr`: адрес выбирается Helper атомарно из фактической
 конфигурации Instance. Возвращаемая metadata Connection по-прежнему содержит выбранный
 `addressCidr` для диагностики.
+Для `awg-quick strip` Helper размещает временную конфигурацию внутри отдельного
+каталога операции, но сохраняет basename `<interface>.conf`: AWG 3.1 отвергает
+иначе корректный файл, если его имя не совпадает с именем интерфейса. Временный
+каталог имеет mode `0700` и удаляется после apply или rollback.
 
 ## 14. Helper RPC
 
@@ -567,6 +571,8 @@ GitHub Actions должен выполнять:
   allocation и добавление peer выполняются под одним Instance lock;
 - внешний конфликт config fingerprint;
 - syntax failure и полный rollback;
+- AWG 3.1 validation использует interface-named temporary config внутри
+  изолированного каталога операции;
 - недоступный Panel при локальном `awgctl enforce`;
 - helper/API version negotiation;
 - SQLite backup/migration/restore.

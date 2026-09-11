@@ -35,3 +35,13 @@ supported IPv4 server subnet, allocation data is malformed, or no free host exis
 
 - **WHEN** a client sends `addressCidr` to the public connection-issuance endpoint
 - **THEN** strict request validation rejects the unknown privileged field without calling Helper or mutating the Instance
+
+### Requirement: Adapter validation preserves interface filename semantics
+
+Helper MUST validate apply and rollback candidates in an operation-isolated temporary
+directory while preserving the adapter-required `<interface>.conf` basename.
+
+#### Scenario: AWG 3.1 validates a newly allocated peer
+
+- **WHEN** Helper prepares an AWG 3.1 configuration containing the allocated peer
+- **THEN** `awg-quick strip` receives a file named for the selected interface, validation succeeds, and concurrent operations retain separate temporary paths

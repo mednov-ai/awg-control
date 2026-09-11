@@ -412,12 +412,15 @@ func (r *DockerRuntime) Apply(instance Instance, operationID string, original, u
 	if !validInstance(instance) || !safeID(operationID) {
 		return errors.New("invalid transaction metadata")
 	}
-	remoteNew := path.Join("/tmp", "awg-control-"+operationID+".conf")
-	remoteStripped := path.Join("/tmp", "awg-control-"+operationID+".stripped.conf")
+	remoteDir, remoteNew, remoteStripped := transactionPaths("awg-control-", operationID, instance.InterfaceName)
 	cleanup := func() {
 		_, _ = r.exec(instance.ContainerID, "rm", "-f", remoteNew, remoteStripped)
+		_, _ = r.exec(instance.ContainerID, "rmdir", remoteDir)
 	}
 	defer cleanup()
+	if _, err := r.exec(instance.ContainerID, "mkdir", "-m", "700", remoteDir); err != nil {
+		return errors.New("prepare transaction workspace failed")
+	}
 	if err := r.copyTo(instance.ContainerID, remoteNew, updated); err != nil {
 		return err
 	}
@@ -454,9 +457,14 @@ func (r *DockerRuntime) Apply(instance Instance, operationID string, original, u
 }
 
 func (r *DockerRuntime) rollback(instance Instance, operationID string, original []byte) error {
-	remoteOriginal := path.Join("/tmp", "awg-control-rollback-"+operationID+".conf")
-	remoteStripped := path.Join("/tmp", "awg-control-rollback-"+operationID+".stripped.conf")
-	defer func() { _, _ = r.exec(instance.ContainerID, "rm", "-f", remoteOriginal, remoteStripped) }()
+	remoteDir, remoteOriginal, remoteStripped := transactionPaths("awg-control-rollback-", operationID, instance.InterfaceName)
+	defer func() {
+		_, _ = r.exec(instance.ContainerID, "rm", "-f", remoteOriginal, remoteStripped)
+		_, _ = r.exec(instance.ContainerID, "rmdir", remoteDir)
+	}()
+	if _, err := r.exec(instance.ContainerID, "mkdir", "-m", "700", remoteDir); err != nil {
+		return errors.New("prepare rollback workspace failed")
+	}
 	if err := r.copyTo(instance.ContainerID, remoteOriginal, original); err != nil {
 		return err
 	}
@@ -518,6 +526,13 @@ func quickBinary(instance Instance) string {
 		return "awg-quick"
 	}
 	return "wg-quick"
+}
+
+func transactionPaths(prefix, operationID, interfaceName string) (directory, configuration, stripped string) {
+	directory = path.Join("/tmp", prefix+operationID)
+	configuration = path.Join(directory, interfaceName+".conf")
+	stripped = path.Join(directory, interfaceName+".stripped.conf")
+	return directory, configuration, stripped
 }
 
 func validWireGuardKey(value string) bool {

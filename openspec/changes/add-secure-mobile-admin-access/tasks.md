@@ -36,6 +36,7 @@
 - [x] 5.4 Add installation and rollback instructions that affect only the Panel virtual host and never overwrite the existing `play-and-say.ru` site, expose Docker, or touch Amnezia peers.
 - [x] 5.5 Remove manual VPN CIDR from Web/API connection issuance and implement atomic Helper allocation from the selected Instance IPv4 subnet with stable fail-closed errors.
 - [x] 5.6 Add parser/helper/API/UI tests for occupied ranges, exhausted or ambiguous pools, rollback, request-field rejection, localization, and narrow-screen issuance.
+- [x] 5.7 Preserve the `<interface>.conf` basename in isolated Helper apply/rollback workspaces and add an AWG 3.1 adapter-validation regression test.
 
 ## 6. Verification and staged rollout
 

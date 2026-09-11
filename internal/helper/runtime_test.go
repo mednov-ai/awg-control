@@ -1,11 +1,22 @@
 package helper
 
 import (
+	"context"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/mednov-ai/awg-control/internal/configdoc"
 )
+
+type recordingRunner struct {
+	calls [][]string
+}
+
+func (r *recordingRunner) Run(_ context.Context, name string, args []string, _ []byte, _ int) ([]byte, error) {
+	r.calls = append(r.calls, append([]string{name}, args...))
+	return []byte(fixturePublicKey + "\n"), nil
+}
 
 func parseProfile(t *testing.T, binaryName, config string) (adapterProfile, map[string]string) {
 	t.Helper()
@@ -101,5 +112,32 @@ func TestQuickBinaryMatchesAdapterTooling(t *testing.T) {
 	}
 	if quickBinary(Instance{Binary: "wg"}) != "wg-quick" {
 		t.Fatal("WireGuard config validation must use wg-quick")
+	}
+}
+
+func TestApplyValidatesInterfaceNamedConfiguration(t *testing.T) {
+	runner := &recordingRunner{}
+	runtime := &DockerRuntime{runner: runner}
+	instance := Instance{
+		ID: "018bcfe5-6800-7000-8000-000000000000", ContainerID: strings.Repeat("a", 64),
+		InterfaceName: "awg0", ConfigPath: "/config/awg0.conf", Binary: "awg",
+	}
+	if err := runtime.Apply(instance, "018bcfe5-6800-7000-8000-000000000001", []byte("original"), []byte("updated"), fixturePublicKey, true); err != nil {
+		t.Fatal(err)
+	}
+	foundStrip := false
+	for _, call := range runner.calls {
+		if len(call) >= 7 && call[0] == "docker" && call[1] == "exec" && call[4] == "awg-quick" && call[5] == "strip" {
+			foundStrip = true
+			if filepath.Base(call[6]) != "awg0.conf" {
+				t.Fatalf("awg-quick must validate an interface-named config, got %q", call[6])
+			}
+			if filepath.Dir(call[6]) == "/tmp" {
+				t.Fatalf("operation isolation requires a dedicated temporary directory, got %q", call[6])
+			}
+		}
+	}
+	if !foundStrip {
+		t.Fatal("missing awg-quick strip call")
 	}
 }
