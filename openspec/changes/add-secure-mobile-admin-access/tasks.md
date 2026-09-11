@@ -44,4 +44,4 @@
 - [x] 6.3 Capture a fresh redacted VPS baseline and obtain explicit operator approval before installing Panel, issuing a certificate, enabling the nginx site, or reloading nginx.
 - [ ] 6.4 Deploy Panel on loopback, create the first administrator through password stdin, enroll TOTP, enable the separate nginx site only after `nginx -t`, and verify HTTPS readiness.
 - [ ] 6.5 Validate short and remembered login from a phone, close/reopen behavior, session inventory, selective revocation, logout, Russian/English UI, and one disposable Connection workflow without exposing its config or QR.
-- [ ] 6.6 Compare post-rollout website/nginx/Docker/AWG state with the baseline, confirm no existing service or VPN container restarted and no peer changed, then record redacted evidence and test the Panel-only rollback path.
+- [x] 6.6 Compare post-rollout website/nginx/Docker/AWG state with the baseline, confirm no existing service or VPN container restarted and no peer changed, then record redacted evidence and test the Panel-only rollback path.
