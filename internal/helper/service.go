@@ -196,7 +196,7 @@ func (s *Service) create(request protocol.Request) (result any, failure *protoco
 	if err := protocol.DecodeParameters(request.Parameters, &params); err != nil {
 		return nil, rpcError("INVALID_REQUEST", err.Error(), false)
 	}
-	if !safeID(params.InstanceID) || !safeID(params.ConnectionID) || !parseCIDR(params.AddressCIDR) ||
+	if !safeID(params.InstanceID) || !safeID(params.ConnectionID) || (params.AddressCIDR != "" && !parseCIDR(params.AddressCIDR)) ||
 		strings.ContainsAny(params.Name, "\r\n") || len(params.Name) < 1 || len(params.Name) > 120 || !validEndpointHost(params.EndpointHost) {
 		return nil, rpcError("INVALID_REQUEST", "invalid create parameters", false)
 	}
@@ -239,15 +239,24 @@ func (s *Service) create(request protocol.Request) (result any, failure *protoco
 	if err != nil {
 		return nil, rpcError("ADAPTER_READ_ONLY", "configuration structure is unsupported", false)
 	}
+	addressCIDR := params.AddressCIDR
+	if addressCIDR == "" {
+		addressCIDR, err = document.AllocateIPv4AddressCIDR()
+	} else {
+		err = document.ValidateAvailableIPv4AddressCIDR(addressCIDR)
+	}
+	if err != nil {
+		return nil, rpcError("ADDRESS_POOL_UNAVAILABLE", "a safe client address could not be allocated", false)
+	}
 	privateKey, publicKey, err := s.runtime.GenerateKeyPair(instance)
 	if err != nil {
 		return nil, rpcError("KEY_GENERATION_FAILED", "client key generation failed", false)
 	}
 	defer zeroString(&privateKey)
-	if err := document.AddPeer(publicKey, params.AddressCIDR, params.Name); err != nil {
+	if err := document.AddPeer(publicKey, addressCIDR, params.Name); err != nil {
 		return nil, rpcError("CONFIG_CONFLICT", err.Error(), false)
 	}
-	clientConfig, err := buildClientConfig(instance, privateKey, params.AddressCIDR, params.EndpointHost)
+	clientConfig, err := buildClientConfig(instance, privateKey, addressCIDR, params.EndpointHost)
 	if err != nil {
 		return nil, rpcError("CLIENT_TEMPLATE_UNAVAILABLE", "client config could not be built", false)
 	}
@@ -267,7 +276,7 @@ func (s *Service) create(request protocol.Request) (result any, failure *protoco
 	}
 	_ = s.store.PruneSnapshots(instance.ID, 20)
 	return map[string]any{
-		"publicKey": publicKey, "addressCidr": params.AddressCIDR,
+		"publicKey": publicKey, "addressCidr": addressCIDR,
 		"clientConfig": clientConfig, "sourceFingerprint": instance.SourceFingerprint,
 	}, nil
 }

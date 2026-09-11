@@ -11,6 +11,7 @@ AWG Control must be reachable from a phone without repeatedly entering credentia
 - Rotate and clear browser cookies consistently on login, logout, expiry, idle timeout, and revocation.
 - Reject permanent browser API tokens, tokens in URLs, and tokens stored in `localStorage` or `sessionStorage` as authentication mechanisms for the administrative UI.
 - Add deployment verification and rollback checks for nginx, TLS, Panel health, mobile login persistence, and isolation from the existing website and VPN containers.
+- Remove the low-level VPN CIDR field from mobile connection issuance and allocate a conflict-free client address atomically in Helper from the selected Instance configuration.
 
 ## Capabilities
 
@@ -18,6 +19,7 @@ AWG Control must be reachable from a phone without repeatedly entering credentia
 
 - `admin-session-security`: Password/TOTP login, remembered mobile sessions, idle and absolute expiry, session inventory and revocation, and browser-token prohibitions.
 - `panel-publication`: Safe publication of the loopback-bound Panel through a dedicated nginx HTTPS virtual host without affecting the existing site or Amnezia instances.
+- `automatic-address-allocation`: Safe server-side selection of a free client address during one-time Connection issuance.
 
 ### Modified Capabilities
 
@@ -30,4 +32,4 @@ None. This repository did not previously contain OpenSpec capability files; the 
 - Docker Compose/operator configuration for the public origin and session lifetimes.
 - nginx/ACME operator documentation and guarded deployment/rollback scripts or runbook steps.
 - Security, migration, API-contract, browser, and live read-only verification tests.
-- No change to AWG peer configuration, existing VPN users, Docker socket access, or the existing `play-and-say.ru -> 127.0.0.1:3000` route.
+- No change to existing AWG peers, VPN users, Docker socket access, or the existing `play-and-say.ru -> 127.0.0.1:3000` route; only a newly issued disposable Connection is mutated during the approved test.

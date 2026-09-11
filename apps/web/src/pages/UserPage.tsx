@@ -4,7 +4,7 @@ import { Link, useParams } from "react-router-dom";
 
 import type { Connection } from "@awg-control/contracts";
 
-import { api } from "../api";
+import { api, ApiProblem } from "../api";
 import { AsyncPanel } from "../components/AsyncPanel";
 import { Modal } from "../components/Modal";
 import { OneTimeConfig } from "../components/OneTimeConfig";
@@ -65,7 +65,6 @@ export default function UserPage() {
       const result = await api.issueConnection(id, {
         instanceId: String(data.get("instanceId")),
         name: String(data.get("name")),
-        addressCidr: String(data.get("addressCidr")),
         expiresAt: expires ? new Date(expires).toISOString() : null,
         quotaPolicyId: quota || null,
       });
@@ -73,7 +72,9 @@ export default function UserPage() {
       setIssued(result);
       refresh();
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : t("error"));
+      setError(caught instanceof ApiProblem && caught.problem.code === "ADDRESS_POOL_UNAVAILABLE"
+        ? t("addressAllocationError")
+        : caught instanceof Error ? caught.message : t("error"));
     } finally {
       setPending(false);
     }
@@ -92,7 +93,6 @@ export default function UserPage() {
       {showIssue ? <Modal title={t("issueConnection")} onClose={() => setShowIssue(false)}><form onSubmit={(event) => void issue(event)}>
         <label>{t("deviceName")}<input name="name" required maxLength={120} /></label>
         <label>{t("instance")}<select name="instanceId" required>{instances.data?.items.filter((item) => item.mode === "managed").map((item) => <option key={item.id} value={item.id}>{item.displayName}</option>)}</select></label>
-        <label>{t("addressCidr")}<input className="mono" name="addressCidr" required placeholder="10.8.0.2/32" /></label>
         <label>{t("expiresAt")}<input name="expiresAt" type="datetime-local" /></label>
         <label>{t("quotas")}<select name="quotaPolicyId"><option value="">—</option>{quotas.data?.items.filter((quota) => quota.nodeId === user.data?.user.nodeId).map((quota) => <option key={quota.id} value={quota.id}>{quota.name}</option>)}</select></label>
         {error ? <p className="form-error">{error}</p> : null}

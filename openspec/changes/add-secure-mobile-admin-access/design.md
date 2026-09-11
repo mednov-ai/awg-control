@@ -52,6 +52,22 @@ Fastify will trust proxy metadata only from the local nginx hop rather than enab
 
 The dedicated server block will redirect HTTP to HTTPS, use the existing ACME tooling for a certificate covering the subdomain, apply appropriate security headers, and avoid `includeSubDomains` HSTS changes that could affect unrelated Play&Say hostnames.
 
+### Allocate client addresses inside the Helper transaction
+
+The connection form and public Panel API will not accept a VPN CIDR. During `create`,
+Helper will hold the Instance lock, re-read and fingerprint the configuration, derive
+the supported IPv4 network from the server `Address`, exclude the server,
+network/broadcast and every existing peer `AllowedIPs` range, and select the first
+available host as `/32`. Allocation and peer insertion therefore share the same
+serialization boundary and cannot race through stale Panel state.
+
+Helper will fail closed before generating or applying a peer when the network is
+missing, ambiguous, unsupported, exhausted, or contains malformed allocation data.
+The selected CIDR remains in the one-time response and persisted non-secret Connection
+metadata. A temporarily compatible optional Helper RPC input may be validated for an
+older Panel, but the new Web/API never exposes or sends it; deployment installs Helper
+before Panel.
+
 ## Risks / Trade-offs
 
 - [A stolen phone retains access until idle/absolute expiry] → Require TOTP before remembered sessions, support immediate per-session/all-other revocation, and recommend device lock and remote wipe.
@@ -60,6 +76,7 @@ The dedicated server block will redirect HTTP to HTTPS, use the existing ACME to
 - [Proxy trust mistakes can spoof client IP or scheme] → Trust only loopback nginx, overwrite forwarding headers, and add integration tests for forged headers and Origin mismatch.
 - [Certificate or nginx changes could affect the website] → Use a separate file/server block, preflight DNS/readiness, `nginx -t`, root-owned backup, and post-reload comparison of the existing route.
 - [Session metadata can expose network information] → Return only the current administrator's sessions and redact stored/displayed addresses.
+- [Automatic allocation could race or overlap a broad peer route] → Allocate under the Instance lock from the freshly parsed configuration and treat every peer route as occupied.
 
 ## Migration Plan
 

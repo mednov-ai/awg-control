@@ -79,6 +79,7 @@ describe("Panel HTTP boundary", () => {
     expect(openapiDocument.paths).toHaveProperty("/auth/sessions/revoke-others");
     expect(JSON.stringify(openapiDocument.paths["/auth/login"])).toContain("rememberDevice");
     expect(JSON.stringify(openapiDocument.paths["/auth/login"])).toContain("deviceLabel");
+    expect(JSON.stringify(openapiDocument.paths["/users/{id}/connections"])).not.toContain("addressCidr");
 
     const rejected = await app.inject({
       method: "POST",
@@ -96,6 +97,23 @@ describe("Panel HTTP boundary", () => {
     });
     expect(rejected.statusCode).toBe(400);
     expect(rejected.json()).toMatchObject({ code: "VALIDATION_FAILED" });
+
+    const rejectedAddressOverride = await app.inject({
+      method: "POST",
+      url: "/api/v1/users/018bcfe5-6800-7000-8000-000000000000/connections",
+      headers: {
+        origin: "http://panel.test",
+        cookie: String(cookie).split(";")[0]!,
+        "idempotency-key": "manual-address-override",
+      },
+      payload: {
+        instanceId: "018bcfe5-6800-7000-8000-000000000001",
+        name: "Phone",
+        addressCidr: "10.8.0.2/32",
+      },
+    });
+    expect(rejectedAddressOverride.statusCode).toBe(400);
+    expect(rejectedAddressOverride.json()).toMatchObject({ code: "VALIDATION_FAILED" });
     await app.close();
     db.close();
   });

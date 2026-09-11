@@ -499,7 +499,6 @@ export async function registerRoutes(
           {
             instanceId: UuidSchema,
             name: Type.String({ minLength: 1, maxLength: 120 }),
-            addressCidr: Type.String({ minLength: 3, maxLength: 64 }),
             expiresAt: Type.Optional(Type.Union([Type.String({ format: "date-time" }), Type.Null()])),
             quotaPolicyId: Type.Optional(Type.Union([UuidSchema, Type.Null()])),
           },
@@ -514,7 +513,6 @@ export async function registerRoutes(
       const body = request.body as {
         instanceId: string;
         name: string;
-        addressCidr: string;
         expiresAt?: string | null;
         quotaPolicyId?: string | null;
       };
@@ -550,7 +548,6 @@ export async function registerRoutes(
             expectedFingerprint: instance.sourceFingerprint,
             connectionId,
             name: body.name,
-            addressCidr: body.addressCidr,
             endpointHost: node.node.host,
             expiresAt: body.expiresAt ?? null,
           }),

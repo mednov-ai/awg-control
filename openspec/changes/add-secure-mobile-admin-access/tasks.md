@@ -34,6 +34,8 @@
 - [x] 5.2 Add a dedicated nginx virtual-host template that redirects HTTP, terminates TLS, overwrites trusted forwarding headers, limits body size, and proxies only to `127.0.0.1:8080`.
 - [x] 5.3 Add read-only preflight/verification steps for DNS, SSH host key, port availability, Panel readiness, certificate hostname/expiry, nginx syntax, renewal dry run, existing website health, and redacted AWG baselines.
 - [x] 5.4 Add installation and rollback instructions that affect only the Panel virtual host and never overwrite the existing `play-and-say.ru` site, expose Docker, or touch Amnezia peers.
+- [x] 5.5 Remove manual VPN CIDR from Web/API connection issuance and implement atomic Helper allocation from the selected Instance IPv4 subnet with stable fail-closed errors.
+- [x] 5.6 Add parser/helper/API/UI tests for occupied ranges, exhausted or ambiguous pools, rollback, request-field rejection, localization, and narrow-screen issuance.
 
 ## 6. Verification and staged rollout
 

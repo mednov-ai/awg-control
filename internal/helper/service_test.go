@@ -109,6 +109,60 @@ func TestCreateDoesNotPersistClientPrivateKey(t *testing.T) {
 	}
 }
 
+func TestCreateAllocatesAddressInsideLockedConfiguration(t *testing.T) {
+	store, instance := testStore(t)
+	config := []byte("[Interface]\nAddress = 10.0.0.1/24\n\n[Peer]\nPublicKey = existing-fixture\nAllowedIPs = 10.0.0.2/32\n")
+	instance.SourceFingerprint = fileFingerprint(config)
+	if err := store.SaveInstances([]Instance{instance}); err != nil {
+		t.Fatal(err)
+	}
+	runtime := &fakeRuntime{config: append([]byte{}, config...)}
+	service := NewService(store, runtime)
+	request := createRequest(t, instance, "auto-address-fixture")
+	var parameters createParameters
+	if err := json.Unmarshal(request.Parameters, &parameters); err != nil {
+		t.Fatal(err)
+	}
+	parameters.AddressCIDR = ""
+	request.Parameters, _ = json.Marshal(parameters)
+	response := service.Handle(request)
+	if !response.OK {
+		t.Fatalf("create failed: %+v", response.Error)
+	}
+	result := response.Result.(map[string]any)
+	if result["addressCidr"] != "10.0.0.3/32" {
+		t.Fatalf("unexpected allocated address: %+v", result)
+	}
+	if !strings.Contains(string(runtime.config), "AllowedIPs = 10.0.0.3/32") {
+		t.Fatal("allocated address was not applied")
+	}
+}
+
+func TestCreateAllocationFailureLeavesOriginalConfig(t *testing.T) {
+	store, instance := testStore(t)
+	config := []byte("[Interface]\nAddress = 10.0.0.1/30\n\n[Peer]\nPublicKey = existing-fixture\nAllowedIPs = 10.0.0.2/32\n")
+	instance.SourceFingerprint = fileFingerprint(config)
+	if err := store.SaveInstances([]Instance{instance}); err != nil {
+		t.Fatal(err)
+	}
+	runtime := &fakeRuntime{config: append([]byte{}, config...)}
+	service := NewService(store, runtime)
+	request := createRequest(t, instance, "exhausted-address-fixture")
+	var parameters createParameters
+	if err := json.Unmarshal(request.Parameters, &parameters); err != nil {
+		t.Fatal(err)
+	}
+	parameters.AddressCIDR = ""
+	request.Parameters, _ = json.Marshal(parameters)
+	response := service.Handle(request)
+	if response.OK || response.Error == nil || response.Error.Code != "ADDRESS_POOL_UNAVAILABLE" {
+		t.Fatalf("expected allocation error, got %+v", response)
+	}
+	if string(runtime.config) != string(config) {
+		t.Fatal("configuration changed after allocation failure")
+	}
+}
+
 func TestFailedCreateLeavesOriginalConfig(t *testing.T) {
 	store, instance := testStore(t)
 	original := []byte("# keep\n[Interface]\nAddress = 10.0.0.1/24\n")

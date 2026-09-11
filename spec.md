@@ -190,11 +190,18 @@ Read-only discovery:
 
 Для нового Connection helper создаёт клиентскую пару ключей и необходимые параметры в оперативной памяти:
 
-1. Public key добавляется в серверную конфигурацию.
-2. Полный client config возвращается Panel один раз по защищённому SSH-каналу.
-3. API передаёт config активной административной сессии с `Cache-Control: no-store`.
-4. Web локально строит QR-код и предлагает скачать `.conf`.
-5. После ответа backend и helper удаляют client private key из доступной памяти; в SQLite, логах, snapshots панели и audit payload он не записывается.
+1. После взятия lock и повторного чтения конфигурации Helper определяет IPv4-подсеть
+   Instance по серверному `Address`, исключает адрес сервера, network/broadcast и
+   все адреса/ranges существующих peers, затем выбирает первый свободный host как
+   `/32`. Web и публичный API не принимают адрес от администратора.
+2. Если однозначная поддерживаемая подсеть отсутствует или свободный адрес не найден,
+   операция завершается стабильной ошибкой без изменения конфигурации.
+3. Public key добавляется в серверную конфигурацию только с повторно проверенным
+   свободным адресом.
+4. Полный client config возвращается Panel один раз по защищённому SSH-каналу.
+5. API передаёт config активной административной сессии с `Cache-Control: no-store`.
+6. Web локально строит QR-код и предлагает скачать `.conf`.
+7. После ответа backend и helper удаляют client private key из доступной памяти; в SQLite, логах, snapshots панели и audit payload он не записывается.
 
 Повторное получение `.conf` или QR невозможно. При потере конфигурации администратор создаёт заменяющее подключение и отзывает старое. Для imported connection генерация конфигурации также невозможна.
 
@@ -350,6 +357,10 @@ Client private key и полный client config отсутствуют в сх�
 Мутирующие endpoints принимают `Idempotency-Key`. Ошибки используют `application/problem+json` со стабильными `type`, `code`, `status`, `title`, `traceId`; секретные значения и команды helper в ответ не включаются.
 
 `POST /users/{id}/connections` является единственной точкой выдачи client config: успешный response содержит `connection`, `clientConfig` и необходимые данные для локального QR. Повтор того же `Idempotency-Key` после успешной выдачи возвращает metadata без client config и сообщает `CONFIG_ALREADY_ISSUED`; повторно генерировать старый private key нельзя.
+Request создания Connection содержит Instance, имя устройства, необязательные срок и
+квоту, но не содержит `addressCidr`: адрес выбирается Helper атомарно из фактической
+конфигурации Instance. Возвращаемая metadata Connection по-прежнему содержит выбранный
+`addressCidr` для диагностики.
 
 ## 14. Helper RPC
 
@@ -538,6 +549,8 @@ GitHub Actions должен выполнять:
 - классификация 3.0 как read-only и запрет ошибочного fallback AWG3 → AWG2;
 - клиентский шаблон AWG3.1 содержит обязательные общие параметры без сохранения
   private key после одноразовой выдачи;
+- автоматический выбор первого свободного `/32`, пропуск занятых адресов и ranges,
+  отказ для неоднозначной/исчерпанной подсети без изменения исходной конфигурации;
 - counter reset и traffic aggregation;
 - quota/expiry и timezone boundaries;
 - state machine Connection;
@@ -550,6 +563,8 @@ GitHub Actions должен выполнять:
 
 - discovery без мутаций;
 - create → stats → suspend → resume → revoke;
+- конкурентная выдача Connections не может выбрать одинаковый VPN-адрес, поскольку
+  allocation и добавление peer выполняются под одним Instance lock;
 - внешний конфликт config fingerprint;
 - syntax failure и полный rollback;
 - недоступный Panel при локальном `awgctl enforce`;

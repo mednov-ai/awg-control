@@ -88,7 +88,7 @@ export const api = {
     }),
   issueConnection: (
     userId: string,
-    body: { instanceId: string; name: string; addressCidr: string; expiresAt?: string | null; quotaPolicyId?: string | null },
+    body: { instanceId: string; name: string; expiresAt?: string | null; quotaPolicyId?: string | null },
   ) =>
     request<{ connection: Connection; clientConfig: string }>(`/users/${encodeURIComponent(userId)}/connections`, {
       method: "POST",

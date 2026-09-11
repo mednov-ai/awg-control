@@ -255,6 +255,7 @@ export const ErrorCode = {
   FingerprintConflict: "FINGERPRINT_CONFLICT",
   AdapterReadOnly: "ADAPTER_READ_ONLY",
   MutationRolledBack: "MUTATION_ROLLED_BACK",
+  AddressPoolUnavailable: "ADDRESS_POOL_UNAVAILABLE",
   InternalError: "INTERNAL_ERROR",
 } as const;
 export type ErrorCodeValue = (typeof ErrorCode)[keyof typeof ErrorCode];
