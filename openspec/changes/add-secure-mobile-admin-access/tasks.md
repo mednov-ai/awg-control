@@ -39,6 +39,7 @@
 - [x] 5.7 Preserve the `<interface>.conf` basename in isolated Helper apply/rollback workspaces and add an AWG 3.1 adapter-validation regression test.
 - [x] 5.8 Replace GNU-only configuration metadata preservation with strictly validated BusyBox-compatible numeric mode/owner handling for apply and rollback.
 - [x] 5.9 Allow addresses from revoked Connections to be reused through a backed-up SQLite migration, and compensate an applied Helper create when the atomic Panel metadata commit fails.
+- [x] 5.10 Add one-time AmneziaVPN `vpn://` copy delivery beside QR and `.conf`, with AWG 2/3.1 encoding tests, mobile layout, bilingual guidance, and no persistence or URL navigation.
 
 ## 6. Verification and staged rollout
 

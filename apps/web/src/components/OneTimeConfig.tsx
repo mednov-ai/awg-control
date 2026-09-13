@@ -1,13 +1,27 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
-import type { Connection } from "@awg-control/contracts";
+import type { Connection, InstanceRecord } from "@awg-control/contracts";
 
+import { createAmneziaVpnKey } from "../amneziaVpnKey";
 import { useI18n } from "../i18n";
 import { Modal } from "./Modal";
 
-export function OneTimeConfig({ value, onForget }: { value: { connection: Connection; clientConfig: string }; onForget: () => void }) {
+export function OneTimeConfig({ value, instance, onForget }: {
+  value: { connection: Connection; clientConfig: string };
+  instance: InstanceRecord | undefined;
+  onForget: () => void;
+}) {
   const { t } = useI18n();
   const [qr, setQr] = useState<string | null>(null);
+  const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
+  const connectionKey = useMemo(() => {
+    if (!instance) return null;
+    try {
+      return createAmneziaVpnKey(value.clientConfig, value.connection, instance);
+    } catch {
+      return null;
+    }
+  }, [instance, value]);
 
   useEffect(() => {
     let cancelled = false;
@@ -31,6 +45,16 @@ export function OneTimeConfig({ value, onForget }: { value: { connection: Connec
     setTimeout(() => URL.revokeObjectURL(url), 0);
   };
 
+  const copyConnectionKey = async () => {
+    if (!connectionKey) return;
+    try {
+      await navigator.clipboard.writeText(connectionKey);
+      setCopyState("copied");
+    } catch {
+      setCopyState("failed");
+    }
+  };
+
   return (
     <Modal title={t("issuedTitle")} onClose={() => undefined} locked>
       <div className="warning-box">{t("issuedWarning")}</div>
@@ -44,8 +68,17 @@ export function OneTimeConfig({ value, onForget }: { value: { connection: Connec
           <button className="button primary wide" onClick={download}>{t("downloadConfig")}</button>
         </div>
       </div>
+      {connectionKey ? <section className="connection-key-block">
+        <label>{t("connectionKeyLabel")}
+          <input className="mono" readOnly value={connectionKey} onFocus={(event) => event.currentTarget.select()} />
+        </label>
+        <p className="muted">{t("connectionKeyHelp")}</p>
+        <button className="button secondary wide" onClick={() => void copyConnectionKey()}>
+          {copyState === "copied" ? t("copied") : t("copyConnectionKey")}
+        </button>
+        {copyState === "failed" ? <p className="form-error">{t("copyFailed")}</p> : null}
+      </section> : null}
       <button className="button danger wide" onClick={onForget}>{t("closeForever")}</button>
     </Modal>
   );
 }
-

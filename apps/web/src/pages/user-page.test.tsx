@@ -32,6 +32,9 @@ const connection: Connection = {
   rxBytesTotal: 0, txBytesTotal: 0, createdAt: "2026-09-11T00:00:00.000Z", updatedAt: "2026-09-11T00:00:00.000Z", revokedAt: null,
 };
 
+const clientConfig = `[Interface]\nPrivateKey = fixture-private-key\nAddress = 10.8.0.2/32\nDNS = 1.1.1.1\nMTU = 1280\nHeaderProtectionKey = fixture-header-key\nRandomTrailers = on\nDisableCookies = on\n\n[Peer]\nPublicKey = fixture-server-public-key\nEndpoint = vpn.example.test:47300\nAllowedIPs = 0.0.0.0/0, ::/0\nPersistentKeepalive = 25\n`;
+let clipboardWrite: ReturnType<typeof vi.fn>;
+
 function renderPage() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
@@ -52,7 +55,9 @@ describe("connection issuance", () => {
     vi.spyOn(api, "user").mockResolvedValue({ user, connections: [] });
     vi.spyOn(api, "instances").mockResolvedValue({ items: [instance] });
     vi.spyOn(api, "quotas").mockResolvedValue({ items: [] });
-    vi.spyOn(api, "issueConnection").mockResolvedValue({ connection, clientConfig: "fixture-one-time-config" });
+    vi.spyOn(api, "issueConnection").mockResolvedValue({ connection, clientConfig });
+    clipboardWrite = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: clipboardWrite } });
   });
 
   it("does not ask for a CIDR and lets Helper allocate it", async () => {
@@ -68,5 +73,18 @@ describe("connection issuance", () => {
       expiresAt: null,
       quotaPolicyId: null,
     }));
+  });
+
+  it("offers a copyable one-time vpn link for same-phone import", async () => {
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: "+ Create connection" }));
+    fireEvent.change(screen.getByLabelText("Device name"), { target: { value: "Phone" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create and show once" }));
+
+    const linkInput = await screen.findByLabelText("AmneziaVPN connection link");
+    expect((linkInput as HTMLInputElement).value).toMatch(/^vpn:\/\//);
+    fireEvent.click(screen.getByRole("button", { name: "Copy link" }));
+    await waitFor(() => expect(clipboardWrite).toHaveBeenCalledWith(expect.stringMatching(/^vpn:\/\//)));
+    expect(screen.getByRole("button", { name: "Copied" })).toBeInTheDocument();
   });
 });

@@ -12,6 +12,7 @@ AWG Control must be reachable from a phone without repeatedly entering credentia
 - Reject permanent browser API tokens, tokens in URLs, and tokens stored in `localStorage` or `sessionStorage` as authentication mechanisms for the administrative UI.
 - Add deployment verification and rollback checks for nginx, TLS, Panel health, mobile login persistence, and isolation from the existing website and VPN containers.
 - Remove the low-level VPN CIDR field from mobile connection issuance and allocate a conflict-free client address atomically in Helper from the selected Instance configuration.
+- Add a one-time `vpn://` connection link beside QR and `.conf` delivery so an administrator can import the new connection from the same phone without scanning its own screen.
 
 ## Capabilities
 
@@ -29,6 +30,7 @@ None. This repository did not previously contain OpenSpec capability files; the 
 
 - API authentication contract, session persistence and migration, cookie handling, audit events, rate limits, and OpenAPI definitions.
 - React login and settings UI in Russian and English, including responsive mobile behavior.
+- React one-time issuance UI and local AmneziaVPN-compatible link encoding; the link contains the same ephemeral secret as the QR/config and is never persisted.
 - Docker Compose/operator configuration for the public origin and session lifetimes.
 - nginx/ACME operator documentation and guarded deployment/rollback scripts or runbook steps.
 - Security, migration, API-contract, browser, and live read-only verification tests.

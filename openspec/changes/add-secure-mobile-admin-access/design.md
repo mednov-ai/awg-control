@@ -68,6 +68,17 @@ metadata. A temporarily compatible optional Helper RPC input may be validated fo
 older Panel, but the new Web/API never exposes or sends it; deployment installs Helper
 before Panel.
 
+### Provide a same-phone import path without persisting client secrets
+
+The one-time issuance dialog will continue to offer the native `.conf` and its QR code,
+and will additionally derive an AmneziaVPN-compatible `vpn://` key locally in Web. The
+key uses Amnezia's length-prefixed zlib-compressed JSON envelope and carries all AWG 2
+or AWG 3.1 parameters from the already-issued native config. It is rendered only in the
+locked one-time dialog, copied only after an explicit administrator action, never used
+as a browser navigation URL, and removed
+from memory with the client config when that dialog is closed. The API, SQLite, audit,
+logs, backups, history, and browser storage never receive a second persisted representation.
+
 ## Risks / Trade-offs
 
 - [A stolen phone retains access until idle/absolute expiry] → Require TOTP before remembered sessions, support immediate per-session/all-other revocation, and recommend device lock and remote wipe.

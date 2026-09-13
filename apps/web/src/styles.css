@@ -150,6 +150,9 @@ tbody tr:last-child td { border-bottom: 0; }
 .issuance-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; align-items: center; margin-bottom: 20px; }
 .qr-box { min-height: 260px; display: grid; place-items: center; background: #fff; border-radius: 12px; overflow: hidden; color: #111; }
 .qr-box img { width: 100%; display: block; }
+.connection-key-block { margin: 0 0 20px; padding: 16px; border: 1px solid var(--line); border-radius: 12px; background: #0c1522; }
+.connection-key-block input { width: 100%; margin-top: 7px; }
+.connection-key-block p { margin: 10px 0; font-size: .85rem; }
 .details-list dt { color: var(--muted); font-size: .75rem; }
 .details-list dd { margin: 4px 0 14px; }
 .login-page, .center-state { min-height: 100vh; display: grid; place-items: center; padding: 24px; }

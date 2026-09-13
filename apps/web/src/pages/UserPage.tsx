@@ -98,7 +98,11 @@ export default function UserPage() {
         {error ? <p className="form-error">{error}</p> : null}
         <div className="form-actions"><button type="button" className="button ghost" onClick={() => setShowIssue(false)}>{t("cancel")}</button><button className="button primary" disabled={pending}>{pending ? t("loading") : t("issue")}</button></div>
       </form></Modal> : null}
-      {issued ? <OneTimeConfig value={issued} onForget={() => setIssued(null)} /> : null}
+      {issued ? <OneTimeConfig
+        value={issued}
+        instance={instances.data?.items.find((item) => item.id === issued.connection.instanceId)}
+        onForget={() => setIssued(null)}
+      /> : null}
     </div>
   );
 }
