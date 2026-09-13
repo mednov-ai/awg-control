@@ -22,7 +22,7 @@ describe("database migrations", () => {
     expect(tables.map(({ name }) => name)).toContain("audit_events");
     const columns = db.prepare("PRAGMA table_info(connections)").all() as Array<{ name: string }>;
     expect(columns.map(({ name }) => name)).toContain("quota_override_at");
-    expect(db.prepare("SELECT MAX(version) AS version FROM schema_migrations").get()).toMatchObject({ version: 4 });
+    expect(db.prepare("SELECT MAX(version) AS version FROM schema_migrations").get()).toMatchObject({ version: 5 });
     const instanceColumns = db.prepare("PRAGMA table_info(instances)").all() as Array<{ name: string }>;
     expect(instanceColumns.map(({ name }) => name)).toContain("protocol_version");
     expect(db.pragma("foreign_keys", { simple: true })).toBe(1);
@@ -93,6 +93,58 @@ describe("database migrations", () => {
     const row = db.prepare("SELECT public_id, admin_id, session_kind, expires_at, idle_expires_at FROM sessions").get() as Record<string, unknown>;
     expect(row).toMatchObject({ admin_id: "018bcfe5-6800-7000-8000-000000000001", session_kind: "short", expires_at: "2026-09-10T00:00:00.000Z", idle_expires_at: null });
     expect(String(row.public_id)).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+    expect(db.pragma("foreign_key_check")).toEqual([]);
+    expect(readdirSync(directory).some((name) => name.includes(".pre-migration-") && name.endsWith(".backup"))).toBe(true);
+    db.close();
+  });
+
+  it("reuses an address only after the previous connection is revoked", () => {
+    const directory = mkdtempSync(join(tmpdir(), "awg-control-address-reuse-"));
+    temporaryDirectories.push(directory);
+    const migrations = new URL("../migrations", import.meta.url).pathname;
+    const oldMigrations = join(directory, "v4-migrations");
+    const databasePath = join(directory, "upgrade.db");
+    mkdirSync(oldMigrations);
+    for (const name of ["0001_initial.sql", "0002_quota_override.sql", "0003_awg3_protocol_version.sql", "0004_admin_sessions.sql"]) {
+      copyFileSync(join(migrations, name), join(oldMigrations, name));
+    }
+    const oldDb = openDatabase(databasePath, oldMigrations);
+    const now = "2026-09-13T00:00:00.000Z";
+    oldDb.prepare(`INSERT INTO nodes(
+      id, name, host, port, ssh_username, host_key_fingerprint, transport_private_key_encrypted,
+      created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).run("node-1", "node", "vpn.example.test", 22, "agent", "SHA256:fixture", "encrypted", now, now);
+    oldDb.prepare(`INSERT INTO instances(
+      id, node_id, display_name, adapter, protocol_version, container_ref, interface_name, config_ref,
+      capabilities_json, source_fingerprint, last_discovered_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+      "instance-1", "node-1", "AWG 3.1", "awg3", "3.1", "container-1", "awg0", "config-1", "{}", "a".repeat(64), now,
+    );
+    oldDb.prepare(`INSERT INTO vpn_users(id, node_id, display_name, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?)`).run("user-1", "node-1", "user", now, now);
+    oldDb.prepare(`INSERT INTO connections(
+      id, vpn_user_id, instance_id, name, public_key, address_cidr, source,
+      management_mode, status, created_at, updated_at, revoked_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+      "connection-old", "user-1", "instance-1", "old", "public-key-old", "10.8.3.2/32", "created", "managed", "revoked", now, now, now,
+    );
+    oldDb.prepare(`INSERT INTO traffic_rollups(connection_id, bucket_start, bucket_kind, rx_bytes, tx_bytes)
+      VALUES (?, ?, ?, ?, ?)`).run("connection-old", now, "daily", 11, 12);
+    oldDb.close();
+
+    const db = openDatabase(databasePath, migrations);
+    const insert = db.prepare(`INSERT INTO connections(
+      id, vpn_user_id, instance_id, name, public_key, address_cidr, source,
+      management_mode, status, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+    insert.run("connection-new", "user-1", "instance-1", "new", "public-key-new", "10.8.3.2/32", "created", "managed", "active", now, now);
+    expect(() => insert.run(
+      "connection-conflict", "user-1", "instance-1", "conflict", "public-key-conflict", "10.8.3.2/32", "created", "managed", "suspended", now, now,
+    )).toThrow(/UNIQUE constraint failed/);
+    expect(db.prepare("SELECT COUNT(*) AS count FROM connections WHERE address_cidr = ?").get("10.8.3.2/32"))
+      .toMatchObject({ count: 2 });
+    expect(db.prepare("SELECT rx_bytes, tx_bytes FROM traffic_rollups WHERE connection_id = ?").get("connection-old"))
+      .toMatchObject({ rx_bytes: 11, tx_bytes: 12 });
     expect(db.pragma("foreign_key_check")).toEqual([]);
     expect(readdirSync(directory).some((name) => name.includes(".pre-migration-") && name.endsWith(".backup"))).toBe(true);
     db.close();

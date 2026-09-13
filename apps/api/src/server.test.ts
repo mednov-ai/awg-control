@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { HelperClient } from "./helper/client.js";
 import type { HelperRequest, HelperResponse } from "@awg-control/contracts";
 import { openDatabase } from "./database.js";
-import { Repository } from "./repository.js";
+import { Repository, type NodeSecretRecord } from "./repository.js";
 import { hashPassword } from "./security/crypto.js";
 import { encryptSecret } from "./security/crypto.js";
 import * as OTPAuth from "otpauth";
@@ -114,6 +114,111 @@ describe("Panel HTTP boundary", () => {
     });
     expect(rejectedAddressOverride.statusCode).toBe(400);
     expect(rejectedAddressOverride.json()).toMatchObject({ code: "VALIDATION_FAILED" });
+    await app.close();
+    db.close();
+  });
+
+  it("revokes an applied peer when connection metadata cannot be committed", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "awg-control-issuance-compensation-"));
+    directories.push(directory);
+    const databasePath = join(directory, "test.db");
+    const migrationsPath = new URL("../migrations", import.meta.url).pathname;
+    const db = openDatabase(databasePath, migrationsPath);
+    const repository = new Repository(db);
+    repository.createAdmin("operator", await hashPassword("correct horse battery staple"));
+    const nodeId = "018bcfe5-6800-7000-8000-000000000010";
+    const instanceId = "018bcfe5-6800-7000-8000-000000000011";
+    repository.createNode({
+      id: nodeId,
+      name: "Fixture node",
+      description: null,
+      host: "vpn.example.test",
+      port: 22,
+      sshUsername: "agent",
+      hostKeyFingerprint: "SHA256:fixture",
+      transportPrivateKeyEncrypted: "encrypted-fixture",
+      pollIntervalSeconds: 60,
+    });
+    const originalFingerprint = "a".repeat(64);
+    const appliedFingerprint = "b".repeat(64);
+    repository.upsertInstances(nodeId, [{
+      id: instanceId,
+      displayName: "AWG 3.1",
+      adapter: "awg3",
+      protocolVersion: "3.1",
+      containerRef: "fixture-container",
+      interfaceName: "awg0",
+      configRef: "fixture-config",
+      capabilities: { stats: true, create: true, suspend: true, resume: true, revoke: true, metadataUpdate: false },
+      sourceFingerprint: originalFingerprint,
+      mode: "managed",
+      lastDiscoveredAt: "2026-09-13T00:00:00.000Z",
+    }]);
+    const user = repository.createUser({ nodeId, displayName: "Fixture user", externalReference: null, notes: null });
+    repository.createConnection({
+      id: "018bcfe5-6800-7000-8000-000000000012",
+      vpnUserId: user.id,
+      instanceId,
+      name: "Existing device",
+      publicKey: "existing-public-key-fixture-value",
+      addressCidr: "10.8.3.2/32",
+      source: "created",
+      managementMode: "managed",
+      status: "active",
+      expiresAt: null,
+      quotaPolicyId: null,
+    });
+    const helperActions: string[] = [];
+    const compensatingHelper: HelperClient = {
+      async call<T>(_node: NodeSecretRecord, request: HelperRequest): Promise<HelperResponse<T>> {
+        helperActions.push(request.action);
+        if (request.action === "create") {
+          return {
+            ok: true,
+            requestId: request.requestId,
+            result: {
+              publicKey: "new-public-key-fixture-value-0001",
+              addressCidr: "10.8.3.2/32",
+              clientConfig: "one-time-config-fixture",
+              sourceFingerprint: appliedFingerprint,
+            } as T,
+          };
+        }
+        if (request.action === "revoke") {
+          return {
+            ok: true,
+            requestId: request.requestId,
+            result: { connectionId: String(request.parameters.connectionId), sourceFingerprint: originalFingerprint } as T,
+          };
+        }
+        return { ok: false, requestId: request.requestId, error: { code: "TEST_ONLY", message: "unexpected action", retryable: false } };
+      },
+    };
+    const app = await buildServer({
+      host: "127.0.0.1", port: 8080, databasePath, migrationsPath, webRoot: null,
+      masterKey: Buffer.alloc(32, 6), sessionTtlSeconds: 3600,
+      rememberedSessionTtlSeconds: 2_592_000, rememberedSessionIdleTtlSeconds: 604_800,
+      sessionActivityWriteIntervalSeconds: 300, secureCookies: false,
+      publicOrigin: "http://panel.test", trustedProxyHops: 0, pollingEnabled: false,
+    }, repository, compensatingHelper);
+    const login = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/login",
+      headers: { origin: "http://panel.test" },
+      payload: { username: "operator", password: "correct horse battery staple" },
+    });
+    const cookie = String(login.headers["set-cookie"]).split(";")[0]!;
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/v1/users/${user.id}/connections`,
+      headers: { origin: "http://panel.test", cookie, "idempotency-key": "issuance-compensation-test" },
+      payload: { instanceId, name: "New device" },
+    });
+    expect(response.statusCode).toBe(500);
+    expect(response.json()).toMatchObject({ code: "INTERNAL_ERROR" });
+    expect(helperActions).toEqual(["create", "revoke"]);
+    expect(repository.listConnectionsForUser(user.id)).toHaveLength(1);
+    expect(repository.getInstance(instanceId)?.sourceFingerprint).toBe(originalFingerprint);
     await app.close();
     db.close();
   });

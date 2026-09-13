@@ -36,6 +36,23 @@ supported IPv4 server subnet, allocation data is malformed, or no free host exis
 - **WHEN** a client sends `addressCidr` to the public connection-issuance endpoint
 - **THEN** strict request validation rejects the unknown privileged field without calling Helper or mutating the Instance
 
+### Requirement: Revoked addresses are reusable without orphaning peers
+
+Panel persistence MUST reserve an Instance address for every Connection except a
+fully revoked Connection. The metadata commit after Helper create MUST be atomic; if
+it fails, Panel MUST compensate by revoking the just-applied peer before returning an
+error.
+
+#### Scenario: First free address belonged to a revoked connection
+
+- **WHEN** Helper assigns an address that exists only in historical revoked Connection metadata
+- **THEN** Panel persists the new active Connection and preserves both historical records
+
+#### Scenario: Metadata commit fails after Helper create
+
+- **WHEN** Helper applied a new peer but SQLite cannot atomically commit its Connection, Instance fingerprint, idempotency result, and audit event
+- **THEN** Panel revokes that exact newly applied peer, updates the Instance fingerprint, returns a non-secret error, and does not expose or retain the one-time client configuration
+
 ### Requirement: Adapter validation preserves interface filename semantics
 
 Helper MUST validate apply and rollback candidates in an operation-isolated temporary

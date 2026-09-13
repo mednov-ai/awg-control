@@ -553,32 +553,67 @@ export async function registerRoutes(
           }),
         );
         if (!response.ok) throw new AppError(409, response.error.code, response.error.message);
-        const connection = repository.createConnection({
-          id: connectionId,
-          vpnUserId: userId,
-          instanceId: instance.id,
-          name: body.name,
-          publicKey: response.result.publicKey,
-          addressCidr: response.result.addressCidr,
-          source: "created",
-          managementMode: "managed",
-          status: "active",
-          expiresAt: body.expiresAt ?? null,
-          quotaPolicyId: body.quotaPolicyId ?? null,
-        });
-        repository.updateInstanceFingerprint(instance.id, response.result.sourceFingerprint);
-        repository.finishIdempotency(scope, op, "succeeded", connection.id, null);
-        repository.addAudit({
-          adminId: request.admin!.id,
-          action: "connection.issue",
-          targetType: "connection",
-          targetId: connection.id,
-          nodeId: user.nodeId,
-          operationId: op,
-          result: "success",
-          remoteAddress: request.ip,
-          details: { instanceId: instance.id, configIssued: true },
-        });
+        let connection;
+        try {
+          connection = repository.completeConnectionIssuance({
+            connection: {
+              id: connectionId,
+              vpnUserId: userId,
+              instanceId: instance.id,
+              name: body.name,
+              publicKey: response.result.publicKey,
+              addressCidr: response.result.addressCidr,
+              source: "created",
+              managementMode: "managed",
+              status: "active",
+              expiresAt: body.expiresAt ?? null,
+              quotaPolicyId: body.quotaPolicyId ?? null,
+            },
+            sourceFingerprint: response.result.sourceFingerprint,
+            idempotencyScope: scope,
+            operationId: op,
+            audit: {
+              adminId: request.admin!.id,
+              action: "connection.issue",
+              targetType: "connection",
+              targetId: connectionId,
+              nodeId: user.nodeId,
+              operationId: op,
+              result: "success",
+              remoteAddress: request.ip,
+              details: { instanceId: instance.id, configIssued: true },
+            },
+          });
+        } catch (persistenceError) {
+          const compensationOperationId = uuidv7();
+          try {
+            const compensation = await helper.call<MutationResult>(
+              node,
+              helperRequest("revoke", compensationOperationId, {
+                instanceId: instance.id,
+                expectedFingerprint: response.result.sourceFingerprint,
+                connectionId,
+                publicKey: response.result.publicKey,
+                override: false,
+              }),
+            );
+            if (!compensation.ok) {
+              throw new AppError(502, compensation.error.code, compensation.error.message);
+            }
+            repository.updateInstanceFingerprint(instance.id, compensation.result.sourceFingerprint);
+          } catch (compensationError) {
+            request.log.error(
+              { err: compensationError, code: "ISSUANCE_COMPENSATION_FAILED", operationId: op },
+              "connection issuance compensation failed",
+            );
+            throw new AppError(
+              500,
+              ErrorCode.InternalError,
+              "Connection metadata could not be saved and the applied peer could not be rolled back",
+            );
+          }
+          throw persistenceError;
+        }
         reply.header("Cache-Control", "no-store, max-age=0");
         reply.header("Pragma", "no-cache");
         return reply.code(201).send({ connection, clientConfig: response.result.clientConfig });

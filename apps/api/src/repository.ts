@@ -569,6 +569,22 @@ export class Repository {
     return this.getConnection(input.id)!;
   }
 
+  public completeConnectionIssuance(input: {
+    connection: Parameters<Repository["createConnection"]>[0];
+    sourceFingerprint: string;
+    idempotencyScope: string;
+    operationId: string;
+    audit: AuditInput;
+  }): Connection {
+    return this.db.transaction(() => {
+      const connection = this.createConnection(input.connection);
+      this.updateInstanceFingerprint(input.connection.instanceId, input.sourceFingerprint);
+      this.finishIdempotency(input.idempotencyScope, input.operationId, "succeeded", connection.id, null);
+      this.addAudit(input.audit);
+      return connection;
+    })();
+  }
+
   public updateConnectionStatus(id: string, status: Connection["status"]): Connection | null {
     const now = utcNow();
     this.db
