@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -31,10 +31,10 @@ function fixture() {
   db.prepare("UPDATE sessions SET pending_totp_secret_encrypted='synthetic-pending'").run();
   const oldPath = join(directory, "old-key"), nextPath = join(directory, "next-key");
   writeFileSync(oldPath, oldKey, { mode: 0o600 }); writeFileSync(nextPath, nextKey, { mode: 0o600 });
-  const run = () => spawnSync(process.execPath,
+  const run = (args = ["master-key", "rotate", "--new-key-file", nextPath]) => spawnSync(process.execPath,
     [...(import.meta.url.endsWith(".ts") ? ["--import", "tsx"] : []),
       fileURLToPath(new URL(import.meta.url.endsWith(".ts") ? "./cli.ts" : "./cli.js", import.meta.url)),
-      "master-key", "rotate", "--new-key-file", nextPath], {
+      ...args], {
       encoding: "utf8", timeout: 10000, env: { ...process.env, AWG_CONTROL_DATABASE: databasePath,
         AWG_CONTROL_MIGRATIONS: migrations, AWG_CONTROL_MASTER_KEY_FILE: oldPath },
     });
@@ -44,8 +44,17 @@ function fixture() {
     totp: (db.prepare("SELECT totp_secret_encrypted AS value FROM admins WHERE id=?").get(admin.id) as { value: string }).value,
     pending: (db.prepare("SELECT pending_totp_secret_encrypted AS value FROM sessions").get() as { value: string | null }).value,
   });
-  return { db, run, values, nodePurpose, relayPurpose, totpPurpose };
+  return { db, run, values, nodePurpose, relayPurpose, totpPurpose, directory };
 }
+
+it("CLI creates an owner-only database backup", () => {
+  const f = fixture();
+  try {
+    const output = join(f.directory, "operator.backup");
+    expect(f.run(["backup", "create", "--output", output]).status).toBe(0);
+    expect(statSync(output).mode & 0o777).toBe(0o600);
+  } finally { f.db.close(); }
+});
 
 it("CLI rotates Node, relay and TOTP credentials together and clears pending enrollment", () => {
   const f = fixture();

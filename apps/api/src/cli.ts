@@ -49,6 +49,7 @@ async function main(): Promise<void> {
       const output = option(args, "--output");
       if (!output) usage();
       await database.backup(resolve(output));
+      chmodSync(resolve(output), 0o600);
       process.stdout.write("Database backup created; embedded secrets remain encrypted.\n");
       return;
     }
