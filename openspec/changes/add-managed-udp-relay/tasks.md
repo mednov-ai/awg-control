@@ -18,19 +18,14 @@
 
 - [x] 4.0 Record selected Selectel target `139.100.236.101`, local SSH alias/key path and successful read-only operator login with stored host-key verification (2026-10-02); inventory and relay readiness remain unverified.
 - [x] 4.1 Update product, architecture, security and operator contracts; verify OpenSpec strict validation and normal local checks.
-- [ ] 4.2 Bootstrap and deploy to Selectel `139.100.236.101` after fresh host-key, architecture, service/port/package/firewall inventory and reviewed installation scope; create separate restricted runtime credentials and retain before/after preservation evidence.
+- [x] 4.2 Bootstrap and deploy to Selectel `139.100.236.101` after fresh host-key, architecture, service/port/package/firewall inventory and reviewed installation scope; create separate restricted runtime credentials and retain before/after preservation evidence.
 - [ ] 4.3 Verify real-client direct/relay handshake, traffic and expected exit IP; preserve existing peers/container state and record pilot acceptance separately.
 
 Evidence and remaining gates are recorded in [verification.md](verification.md).
-Documentation and local checks for 4.1 are complete. Compatible Fastify, fast-uri
-and brace-expansion patch updates close the dependency audit findings; the final
-Node 24 / pnpm 11.9 audit, lint, typecheck, tests and build passed.
-Signed delivery and server preparation are in progress; no client tunnel
-acceptance has been performed. See verification.md for current evidence.
-
-The subsequent SSH-only check recorded in design.md supplies the target address
-and operator access details previously listed as missing in verification.md.
-Bootstrap/network review and live tunnel acceptance are still pending.
-Read-only inventory for 4.2 is recorded in verification.md. A signed release
-containing relay RPC is required. The operator removed the review-gate
-requirement on 2026-10-02; signed delivery and pilot evidence remain required.
+Local checks and live bootstrap/deployment (4.1–4.2) are complete. Panel and VPN
+Helper run signed v0.4.9; Selectel relay runs signed Helper v0.4.11. The relay is
+ready and routes UDP 47300 to the existing AWG 3.1 Instance. Existing peer/config
+fingerprints, AWG containers and nginx/RepairDevice processes were preserved.
+Actual-client direct/relay acceptance (4.3) remains open. v0.4.11 CI and Release publication succeeded; installed relay Helper matches
+the published checksum/signature. Relayed client handshake/traffic were observed;
+direct-profile and client exit-IP confirmation remain pending.

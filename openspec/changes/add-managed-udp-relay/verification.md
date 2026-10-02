@@ -2,8 +2,8 @@
 
 Implementation and local verification are complete. The sections below record
 the initial verification and subsequent delivery work separately. Task 4.1 is
-complete; tasks 4.2–4.3 remain open until live deployment and client evidence are
-recorded.
+complete; task 4.2 live deployment is complete, and task 4.3 remains open for
+actual-client evidence.
 
 ## Passed
 
@@ -162,3 +162,79 @@ under UID/GID 65534 in addition to a first-install absent runtime directory.
 
 The corrected fixture, including unprivileged read and root-only state checks,
 passed; full Go vet/race and shell syntax passed again.
+
+
+## Successful live bootstrap — 2026-10-02 17:51 UTC
+
+Commit `56168565a5122f138513218ed58960e4961dafc3` was pushed to main and tagged
+v0.4.11. CI 37043106899 passed all jobs. Release 37043106760 passed verification
+and signed both Helpers; Panel image and final publication were pending at this
+checkpoint. Its signed amd64 Actions artifact passed exact v0.4.11 workflow
+identity, issuer, transparency and checksum verification before replacing only
+Selectel's relay Helper. Its previous signed Helper was retained root-only.
+
+With Helper 0.4.11, service install and route apply both succeeded through
+RelayService's versioned SSH, fingerprint, operation journal and commit paths.
+The earlier failed attempts remain in the operation history; no uncertain
+operation was discarded or retried with a new ID. Source fingerprint after
+apply is `6648722a702d15c98d3c0d30b98e4fbc804507f1184bf03ec011bff7fbd8b5a0`.
+Relay registration is `01a0fdb0-e791-7adb-bb89-958e86a831ef`, route is
+`01a0fdbd-c3d6-707c-a649-8f3e244c4c24` for existing managed AWG 3.1 Instance
+`01a08c7a-03bb-786c-b5f4-012d841811d1`.
+
+Fresh Node discovery using VPN Helper 0.4.9 recorded UDP 47300 for AWG 3.1
+and UDP 38829 for AWG2, preserving both existing managed Instance IDs/modes.
+Panel 0.4.9 remains installed by its verified manifest digest; a Panel upgrade
+for the subsequent relay-only fixes is unnecessary.
+
+| Selectel service | State | PID | Active since (UTC) |
+| --- | --- | --- | --- |
+| awg-control-relay | active, enabled | 164368 | 2026-10-02 17:51:04 |
+| nginx | active, preserved | 550 | 2026-09-27 17:14:46 |
+| repairdevice | active, preserved | 105113 | 2026-10-01 14:22:38 |
+
+The dedicated process listens on `0.0.0.0:47300` and routes UDP to
+`89.124.107.104:47300`. Panel status is ready, protocol 1.1, with one enabled
+route. Owned config directory/file permissions are 0755/0644; state/routes
+are 0700/0600. The temporary apt policy is absent. No host/cloud firewall was
+changed, and cloud UDP reachability remains subject to actual-client testing.
+
+Post-relay VPN peer/config fingerprint snapshot exactly matched the original
+baseline (6/10 peers). AWG2/AWG3 container IDs, start times and zero restart
+counts matched; VPN nginx PID/time matched. Panel readiness, public Panel and
+Play&Say each returned HTTP 200. The external master key and DB volume were
+preserved. These checks establish task 4.2 deployment/preservation, not a tunnel.
+
+Task 4.3 remains pending. The operator agreed to test direct/Selectel profiles
+on an actual client. No one-time config window was opened, closed or reloaded
+by the agent; no QR/config/import key was collected. Full host reboot and
+real-client idle/reconnect/recovery have not been verified.
+
+
+## Published release and observed client — 2026-10-02
+
+Release 37043106760 completed successfully, including final publication of all
+eight Helper assets at https://github.com/mednov-ai/awg-control/releases/tag/v0.4.11.
+The published multi-arch Panel manifest is
+`sha256:ba3b78dac87a90dd096776b39dd47cc36052b0c1bab4de03202d7946dc3269bd`.
+This newer Panel image was published but not deployed: live Panel/VPN Helper
+remain compatible v0.4.9, while the relay-only corrections run in Selectel
+Helper v0.4.11. The published amd64 binary/checksum/bundle were downloaded and
+verified again on Selectel; the installed binary hash exactly matched the
+published checksum and exact v0.4.11 workflow certificate verification passed.
+
+Polling refreshed ready status and the repository's issuance endpoint was
+`139.100.236.101:47300`, without issuing or reconstructing a client secret.
+The operator then created a test AWG 3.1 Connection
+`01a0fdc2-04bf-7b2c-9ed3-64aa1bd87756`. Narrow read-only Helper stats observed a
+handshake at 2026-10-02T17:58:03Z with RX 6,442,062 and TX 93,663,173 bytes.
+A narrowly filtered endpoint query classified only that peer's source as Selectel
+(no other endpoints/public keys were printed). This establishes a real relayed
+handshake/traffic path and inbound UDP reachability at that time; direct-profile
+result and actual-client exit-IP confirmation remain pending.
+
+After the operator's test creation, all six original AWG 3.1 peer fingerprints
+were still present plus exactly one new peer (7 total); AWG2 retained its ten
+original peers with no additions. The pre-test exact config-fingerprint match
+remains the deployment-preservation evidence; config change caused by the
+operator's new peer is recorded separately. No peer was revoked by the agent.
