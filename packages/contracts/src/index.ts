@@ -98,6 +98,7 @@ export const InstanceSchema = Type.Object(
     sourceFingerprint: Type.String({ minLength: 16, maxLength: 128 }),
     mode: InstanceModeSchema,
     lastDiscoveredAt: TimestampSchema,
+    udpPort: Type.Optional(Type.Union([Type.Integer({ minimum: 1, maximum: 65535 }), Type.Null()])),
   },
   { additionalProperties: false },
 );
@@ -317,3 +318,62 @@ export interface DashboardSummary {
   rxBytesTotal: number;
   txBytesTotal: number;
 }
+
+export const RELAY_PROTOCOL_VERSION = "1.1" as const;
+export const Ipv4Schema = Type.String({ format: "ipv4" });
+export const RelayPortSchema = Type.Integer({ minimum: 1024, maximum: 65535 });
+export const RelayServerSchema = Type.Object({
+  id: UuidSchema, name: Type.String({ minLength: 1, maxLength: 120 }),
+  host: Ipv4Schema, publicIpv4: Ipv4Schema, port: Type.Integer({ minimum: 1, maximum: 65535 }),
+  sshUsername: Type.Literal("awg-control-relay-agent"), hostKeyFingerprint: Type.String({ pattern: "^(SHA256:[A-Za-z0-9+/]{43}=?|[a-fA-F0-9]{64})$" }),
+  status: Type.Union([Type.Literal("pending"), Type.Literal("ready"), Type.Literal("offline"), Type.Literal("uninstalled")]),
+  sourceFingerprint: Type.Union([Type.String({ pattern: "^[a-f0-9]{64}$" }), Type.Null()]),
+  helperVersion: Type.Union([Type.String(), Type.Null()]),
+  lastCheckedAt: Type.Union([TimestampSchema, Type.Null()]), lastErrorCode: Type.Union([Type.String(), Type.Null()]),
+  createdAt: TimestampSchema, updatedAt: TimestampSchema,
+}, { additionalProperties: false });
+export type RelayServer = Static<typeof RelayServerSchema>;
+export const RegisterRelaySchema = Type.Object({
+  name: Type.String({ minLength: 1, maxLength: 120 }), host: Ipv4Schema, publicIpv4: Ipv4Schema,
+  port: Type.Optional(Type.Integer({ minimum: 1, maximum: 65535 })),
+  hostKeyFingerprint: RelayServerSchema.properties.hostKeyFingerprint,
+  transportPrivateKey: Type.String({ minLength: 64, maxLength: 32768 }),
+}, { additionalProperties: false });
+export type RegisterRelay = Static<typeof RegisterRelaySchema>;
+export const RelayRouteSchema = Type.Object({
+  id: UuidSchema, relayId: UuidSchema, instanceId: UuidSchema, listenPort: RelayPortSchema,
+  upstreamIpv4: Ipv4Schema, upstreamPort: Type.Integer({ minimum: 1, maximum: 65535 }),
+  enabled: Type.Boolean(), createdAt: TimestampSchema, updatedAt: TimestampSchema,
+}, { additionalProperties: false });
+export type RelayRoute = Static<typeof RelayRouteSchema>;
+export const RelayOperationSchema = Type.Object({
+  id: UuidSchema, relayId: UuidSchema, operationId: OperationIdSchema, action: Type.String(),
+  status: Type.Union([Type.Literal("pending"), Type.Literal("succeeded"), Type.Literal("failed"), Type.Literal("uncertain")]),
+  errorCode: Type.Union([Type.String(), Type.Null()]), createdAt: TimestampSchema, updatedAt: TimestampSchema,
+}, { additionalProperties: false });
+export type RelayOperation = Static<typeof RelayOperationSchema>;
+export const RelayEndpointSchema = Type.Object({
+  routeId: UuidSchema, host: Ipv4Schema, port: RelayPortSchema,
+}, { additionalProperties: false });
+export type RelayEndpoint = Static<typeof RelayEndpointSchema>;
+export interface ConnectionIssuance { connection: Connection; clientConfig: string; relayEndpoint?: RelayEndpoint | null }
+export const RelayActionSchema = Type.Union([
+  Type.Literal("status"), Type.Literal("install"), Type.Literal("update"),
+  Type.Literal("apply"), Type.Literal("disable"), Type.Literal("remove"), Type.Literal("uninstall"),
+]);
+export type RelayAction = Static<typeof RelayActionSchema>;
+export interface RelayRequest {
+  protocolVersion: typeof RELAY_PROTOCOL_VERSION; requestId: string; operationId: string;
+  action: RelayAction; parameters: Record<string, unknown>;
+}
+export const RelayRemoteRouteSchema = Type.Object({
+  id: UuidSchema, listenPort: RelayPortSchema, upstreamIpv4: Ipv4Schema,
+  upstreamPort: Type.Integer({ minimum: 1, maximum: 65535 }), enabled: Type.Boolean(),
+}, { additionalProperties: false });
+export type RelayRemoteRoute = Static<typeof RelayRemoteRouteSchema>;
+export const RelayStatusSchema = Type.Object({
+  installed: Type.Boolean(), active: Type.Boolean(), sourceFingerprint: Type.String({ pattern: "^[a-f0-9]{64}$" }),
+  helperVersion: Type.String(), protocolVersion: Type.Union([Type.Literal("1.0"), Type.Literal("1.1")]),
+  routes: Type.Array(RelayRemoteRouteSchema),
+}, { additionalProperties: false });
+export type RelayStatus = Static<typeof RelayStatusSchema>;

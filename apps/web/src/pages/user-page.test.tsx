@@ -87,4 +87,20 @@ describe("connection issuance", () => {
     await waitFor(() => expect(clipboardWrite).toHaveBeenCalledWith(expect.stringMatching(/^vpn:\/\//)));
     expect(screen.getByRole("button", { name: "Copied" })).toBeInTheDocument();
   });
+
+  it("offers two transient profiles for one peer and clears both on close", async () => {
+    vi.mocked(api.issueConnection).mockResolvedValue({ connection, clientConfig,
+      relayEndpoint: { routeId: "019a0000-0000-7000-8000-000000000001", host: "203.0.113.20", port: 47300 } });
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: "+ Create connection" }));
+    fireEvent.change(screen.getByLabelText("Device name"), { target: { value: "Phone" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create and show once" }));
+    await screen.findByRole("heading", { name: "Via Selectel" });
+    expect(screen.getByRole("heading", { name: "Direct" })).toBeInTheDocument();
+    expect(screen.getAllByLabelText("AmneziaVPN connection link")).toHaveLength(2);
+    expect(screen.getByText(/Both profiles belong to one device/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "I saved it — close forever" }));
+    expect(screen.queryByLabelText("AmneziaVPN connection link")).not.toBeInTheDocument();
+    expect(localStorage.getItem("clientConfig")).toBeNull();
+  });
 });

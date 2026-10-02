@@ -3,6 +3,7 @@ import type { Admin, AdminSession, Connection, InstanceRecord, NodeRecord, Quota
 import type { SqliteDatabase } from "./database.js";
 import { utcNow, uuidv7 } from "./lib/ids.js";
 import { hashOpaque } from "./security/crypto.js";
+import { RelayRepository } from "./relay/repository.js";
 
 type Row = Record<string, unknown>;
 
@@ -61,6 +62,7 @@ function toInstance(row: Row): InstanceRecord {
     sourceFingerprint: String(row.source_fingerprint),
     mode: row.mode as InstanceRecord["mode"],
     lastDiscoveredAt: String(row.last_discovered_at),
+    udpPort: row.udp_port == null ? null : Number(row.udp_port),
   };
 }
 
@@ -153,7 +155,8 @@ export interface AuditInput {
 export class Repository {
   private workerHeartbeatAt: number | null = null;
 
-  public constructor(private readonly db: SqliteDatabase) {}
+  public readonly relays: RelayRepository;
+  public constructor(private readonly db: SqliteDatabase) { this.relays = new RelayRepository(db); }
 
   public markWorkerHeartbeat(): void {
     this.workerHeartbeatAt = Date.now();
@@ -425,8 +428,8 @@ export class Repository {
     const statement = this.db.prepare(
       `INSERT INTO instances(
          id, node_id, display_name, adapter, protocol_version, container_ref, interface_name, config_ref,
-         capabilities_json, source_fingerprint, mode, last_discovered_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         capabilities_json, source_fingerprint, mode, last_discovered_at, udp_port
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(node_id, container_ref, interface_name) DO UPDATE SET
          display_name = excluded.display_name,
          adapter = excluded.adapter,
@@ -434,7 +437,8 @@ export class Repository {
          config_ref = excluded.config_ref,
          capabilities_json = excluded.capabilities_json,
          source_fingerprint = excluded.source_fingerprint,
-         last_discovered_at = excluded.last_discovered_at`,
+         last_discovered_at = excluded.last_discovered_at,
+         udp_port = excluded.udp_port`,
     );
     this.db.transaction(() => {
       for (const instance of instances) {
@@ -451,6 +455,7 @@ export class Repository {
           instance.sourceFingerprint,
           instance.mode,
           instance.lastDiscoveredAt,
+          instance.udpPort ?? null,
         );
       }
     })();

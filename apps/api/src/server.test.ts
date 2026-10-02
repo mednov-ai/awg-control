@@ -79,7 +79,7 @@ describe("Panel HTTP boundary", () => {
     expect(openapiDocument.paths).toHaveProperty("/auth/sessions/revoke-others");
     expect(JSON.stringify(openapiDocument.paths["/auth/login"])).toContain("rememberDevice");
     expect(JSON.stringify(openapiDocument.paths["/auth/login"])).toContain("deviceLabel");
-    expect(JSON.stringify(openapiDocument.paths["/users/{id}/connections"])).not.toContain("addressCidr");
+    expect(JSON.stringify(openapiDocument.paths["/users/{id}/connections"].post.requestBody)).not.toContain("addressCidr");
 
     const rejected = await app.inject({
       method: "POST",

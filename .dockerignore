@@ -9,4 +9,6 @@ secrets
 data
 *.db*
 release
-
+amnezia server.md
+**/.env
+**/secrets

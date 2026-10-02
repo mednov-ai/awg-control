@@ -40,3 +40,7 @@ For AWG 3.1, the one-time client template includes the server-shared header
 protection and padding/timing fields plus an explicit MTU of 1280. Only the
 allowlisted commented `I1`–`I5` fields may be promoted from server comments to
 the client template; comments containing other key-like data remain ignored.
+
+## Managed relay boundary
+
+Relay servers are separate from VPN Nodes. A relay-only forced command exposes nginx stream lifecycle through its own awgctl RPC mode. Panel never receives root shell or arbitrary upstream/configuration access. Relay metadata lives in SQLite; the browser derives an endpoint-only alternative from transient issuance. See [relay guide](relay-guide.md).

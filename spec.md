@@ -1,8 +1,8 @@
 # AWG Control — спецификация продукта
 
 Статус: проектирование v1  
-Версия документа: 0.3
-Дата актуализации: 2026-08-28
+Версия документа: 0.4
+Дата актуализации: 2026-10-02
 
 ## 1. Назначение документа
 
@@ -668,3 +668,69 @@ v1 считается готовой, когда:
 ## 26. Следующие версии
 
 После v1 могут рассматриваться OIDC, end-user portal, PostgreSQL, HA workers, global user/quota across Nodes, уведомления, API tokens, managed Amnezia installation и дополнительные WireGuard-совместимые адаптеры. Эти возможности не должны усложнять или ослаблять безопасность v1 до появления подтверждённой потребности.
+
+## 22. Управляемый UDP relay (Selectel)
+
+Panel управляет отдельным UDP relay на уже подготовленной Ubuntu 24.04 VM.
+Трафик следует client → relay → текущий AWG 3.1 → Internet; VPN завершается и
+выходной IP определяется текущим Node. Relay не получает VPN-ключи и не является
+VPN Node. AWG2 не проксируется в первой версии. Создание VM и изменение облачного/
+host firewall выполняются оператором отдельно.
+
+Оператор bootstrap устанавливает подписанный `awgctl`, отдельную учетную запись
+`awg-control-relay-agent`, forced-command `ssh-relay-rpc` и точный sudo rule.
+Panel использует отдельный зашифрованный transport key с purpose
+`relay-transport-key:<relayId>` и закрепленный SSH host fingerprint. Relay RPC
+1.1 поддерживает также 1.0; VPN RPC сохраняет текущий 1.0 контракт. Операции
+relay не имеют доступа к VPN runtime и не принимают shell-команды, пути или
+nginx-директивы. Node discovery добавляет безопасный `udpPort`; старые Helpers
+остаются совместимыми, но не могут использоваться для relay без обновления.
+
+Panel устанавливает/обновляет отдельную `awg-control-relay.service` и nginx
+stream config по фиксированным шаблонам. Системный nginx, Docker и Amnezia
+не перезапускаются. Relay слушает IPv4 UDP на портах 1024–65535, использует один
+worker, idle timeout 120 секунд и worker shutdown timeout 5 секунд, не ограничивает
+число ответных датаграмм и не использует PROXY protocol. Обновление из UI означает
+обновление службы/конфигурации; подписанный Helper и OS packages обновляет оператор.
+
+Миграция 0006 добавляет nullable `instances.udp_port`, `relay_servers`,
+`relay_routes` и `relay_operations`. RelayServer содержит UUIDv7, name, SSH
+host/port, public IPv4, pinned fingerprint, encrypted key и operational metadata.
+RelayRoute содержит UUIDv7, relayId, instanceId, listenPort, upstream IPv4/port,
+enabled и UTC timestamps. Один Instance имеет один route; listenPort уникален
+на relay, включая disabled routes. RelayOperation содержит operationId, action,
+request hash, несекретный request metadata, status pending/succeeded/failed/uncertain,
+error code и UTC timestamps; один relay имеет не более одной pending/uncertain
+операции. Миграция сохраняет индекс резервирования адресов из 0005. Приватных
+ключей клиента и конфигураций в новых таблицах нет. CLI-ротация master key
+перешифровывает Node, relay и TOTP secrets в одной транзакции; ошибка
+расшифровки любого секрета отменяет всю ротацию.
+
+Администратор регистрирует relay через `/api/v1/relays`, проверяет `/check`,
+применяет `/install`, `/update`, `/apply`, `/disable`, `/remove`, `/uninstall` и
+сверяет `/operations/{operationId}/reconcile`. Unsafe requests требуют сессии,
+Origin и Idempotency-Key. Маршрут требует managed AWG 3.1 и свежего discovery;
+upstream определяется из зарегистрированного публичного IPv4 Node и UDP-port,
+а не из ввода администратора. OpenAPI генерируется из Fastify schemas.
+
+Мутации защищены host lock, fingerprint, durable journal/snapshot, validation,
+атомарной заменой, проверкой новых worker/listen sockets и rollback. Неопределенный
+результат блокирует новые изменения до сверки исходного operationId. Read-only
+status не восстанавливает прерванную транзакцию; восстановление выполняется при
+явной мутации/reconciliation. Rollback восстанавливает также исходное состояние
+автозапуска службы. Проверка здоровья не является проверкой туннеля.
+
+Для нового Connection на доступном relay-маршруте одноразовый response включает
+snapshot несекретного relay endpoint. Browser формирует второй `.conf`, QR и
+`vpn://`, меняя только единственный `[Peer] Endpoint` и сохраняя другие поля и
+комментарии. Оба варианта относятся к одному устройству и используются по очереди.
+После закрытия уничтожаются оба набора; повторная выдача остается
+`CONFIG_ALREADY_ISSUED`. Конфигурации старых подключений повторно не выдаются. Без доступного relay
+прямая выдача остается работоспособной. Shared React Query cache не получает ни
+один секретный вариант.
+
+Удаление службы останавливает только relay и удаляет его unit/config; journal
+сохраняется root-only. Удаление регистрации разрешено только после свежей проверки
+uninstall и отсутствия неопределенных операций. Bootstrap account/binary удаляются
+оператором отдельно. Amnezia и peers не затрагиваются. Детальный runbook и границы
+живой приемки: `docs/relay-guide.md`.

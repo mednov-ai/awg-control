@@ -185,3 +185,7 @@ tbody tr:last-child td { border-bottom: 0; }
   .session-title, .session-row { align-items: stretch; flex-direction: column; }
   .session-row .button { width: 100%; min-height: 44px; }
 }
+
+.relay-variant, .relay-route { margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid #354b64; }
+.relay-operation { margin-top: .75rem; overflow-wrap: anywhere; }
+.relay-card .form-actions { flex-wrap: wrap; }

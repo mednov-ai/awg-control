@@ -14,3 +14,7 @@ The following alternatives are intentionally rejected:
 The production trust boundary is `https://awg.play-and-say.ru` through a dedicated nginx virtual host to `127.0.0.1:8080`. nginx overwrites forwarding headers. Panel trusts exactly one local proxy hop and checks every unsafe API request against the configured origin. Direct public access to port 8080 is prohibited.
 
 Residual risks include an unlocked or compromised remembered device, malicious browser extensions, and compromise of the Panel host. Mitigations are device lock/remote wipe, short idle and absolute limits, TOTP eligibility, immediate server-side revocation, rate limits, CSRF/origin checks, redacted audit data, encrypted application secrets, and least-privilege host access.
+
+## Relay issuance
+
+Direct and relayed profiles are alternatives for one device. Relay endpoint metadata is non-secret, but both derived configurations, QR images and import keys contain the same transient client secret. They must not enter shared caches, browser storage, telemetry, screenshots or logs. Closing issuance clears both variants. Relay settings changes cannot rewrite an already-open issuance window.

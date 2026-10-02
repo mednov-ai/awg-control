@@ -94,6 +94,7 @@ func (s *Service) discover(request protocol.Request) (any, *protocol.Error) {
 		public = append(public, map[string]any{
 			"id": instance.ID, "displayName": instance.DisplayName, "adapter": instance.Adapter,
 			"protocolVersion": instance.ProtocolVersion,
+			"udpPort":         instance.UDPPort,
 			"containerRef":    instance.ContainerRef, "interfaceName": instance.InterfaceName,
 			"configRef": instance.ConfigRef, "capabilities": instance.Capabilities,
 			"sourceFingerprint": instance.SourceFingerprint,

@@ -1,6 +1,6 @@
 import { Client } from "ssh2";
 
-import type { HelperRequest, HelperResponse } from "@awg-control/contracts";
+import type { HelperRequest, HelperResponse, RelayRequest } from "@awg-control/contracts";
 
 import type { NodeSecretRecord } from "../repository.js";
 import { decryptSecret } from "../security/crypto.js";
@@ -37,12 +37,20 @@ export class SshHelperClient implements HelperClient {
   ) {}
 
   public async call<T>(node: NodeSecretRecord, request: HelperRequest): Promise<HelperResponse<T>> {
+    return this.callRpc<T>(node.node, node.transportPrivateKeyEncrypted, `transport-key:${node.node.id}`, request, FIXED_REMOTE_COMMAND);
+  }
+
+  public async callRpc<T>(
+    target: { host: string; port: number; sshUsername: string; hostKeyFingerprint: string },
+    encryptedKey: string, purpose: string, request: HelperRequest | RelayRequest,
+    command: "awg-control-rpc" | "awg-control-relay-rpc",
+  ): Promise<HelperResponse<T>> {
     const privateKey = decryptSecret(
       this.masterKey,
-      `transport-key:${node.node.id}`,
-      node.transportPrivateKeyEncrypted,
+      purpose,
+      encryptedKey,
     );
-    const expected = expectedHostHash(node.node.hostKeyFingerprint);
+    const expected = expectedHostHash(target.hostKeyFingerprint);
 
     try {
       return await new Promise<HelperResponse<T>>((resolve, reject) => {
@@ -61,7 +69,7 @@ export class SshHelperClient implements HelperClient {
 
         client
         .on("ready", () => {
-          client.exec(FIXED_REMOTE_COMMAND, (error, stream) => {
+          client.exec(command, (error, stream) => {
             if (error) {
               clearTimeout(timer);
               done(() => reject(new HelperTransportError("failed to open helper RPC", "HELPER_UNAVAILABLE")));
@@ -110,9 +118,9 @@ export class SshHelperClient implements HelperClient {
           done(() => reject(new HelperTransportError(hostKeyMismatch ? "SSH host key mismatch" : "SSH connection failed", code)));
         })
         .connect({
-          host: node.node.host,
-          port: node.node.port,
-          username: node.node.sshUsername,
+          host: target.host,
+          port: target.port,
+          username: target.sshUsername,
           privateKey,
           readyTimeout: this.timeoutMs,
           hostHash: "sha256",

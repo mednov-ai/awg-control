@@ -122,12 +122,14 @@ To rotate the master key, stop Panel, create another 32-byte file, run
 `master-key rotate --new-key-file`, replace the mounted key atomically, and start
 Panel. Pending TOTP enrollments are intentionally discarded.
 
-## Release gate
+## Release verification
 
-The GitHub `v1-release` environment must have required reviewers. Approve it
-only after the Play&Say pilot checklist is complete and its redacted evidence
-confirms no restarts, no secret exposure, successful rollback, and no changes to
-pre-existing peers. A tag alone must not bypass this environment approval.
+Release delivery uses the GitHub `v1-release` environment without a required
+reviewer gate. Tests, signed multi-arch Panel/Helper artifacts, checksums and
+SBOMs remain required. Verify the relevant artifacts before installation and
+record pilot evidence separately: no restarts, no secret exposure, successful
+rollback and preservation of pre-existing peers. Publication alone does not
+establish deployment or client tunnel acceptance.
 
 ## Uninstall
 
@@ -142,3 +144,7 @@ sudo ./scripts/uninstall-helper.sh --restore-suspended
 Use `--leave-suspended` only when disabled peers must remain disabled; helper
 state is retained so the decision is recoverable. `--purge-helper-state` is
 accepted only after suspended peers were restored.
+
+## Selectel UDP relay
+
+For the dedicated Ubuntu 24.04 VM, bootstrap, restricted access, service installation, route management, rollback and removal follow [the relay guide](relay-guide.md). VM/cloud firewall and OS/Helper upgrades remain reviewed operator actions. Relay service health and actual VPN tunnel acceptance are recorded separately.

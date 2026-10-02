@@ -9,6 +9,7 @@ import (
 
 	"github.com/mednov-ai/awg-control/internal/helper"
 	"github.com/mednov-ai/awg-control/internal/protocol"
+	"github.com/mednov-ai/awg-control/internal/relay"
 	"github.com/mednov-ai/awg-control/internal/version"
 )
 
@@ -22,10 +23,17 @@ func main() {
 
 func run(args []string) error {
 	if len(args) < 1 || len(args) > 2 {
-		return errors.New("usage: awgctl <ssh-rpc|enforce|health|uninstall-prepare restore-suspended|leave-suspended>")
+		return errors.New("usage: awgctl <ssh-rpc|ssh-relay-rpc|enforce|health|uninstall-prepare restore-suspended|leave-suspended>")
 	}
 	if os.Geteuid() != 0 {
 		return errors.New("awgctl must run as root through the restricted sudo rule")
+	}
+	if args[0] == "ssh-relay-rpc" && len(args) == 1 {
+		request, err := relay.DecodeRequest(os.Stdin)
+		if err != nil {
+			return json.NewEncoder(os.Stdout).Encode(protocol.Failure("unknown", "INVALID_REQUEST", "relay request validation failed", false))
+		}
+		return json.NewEncoder(os.Stdout).Encode(relay.NewService("/", relay.SystemRuntime{}).Handle(request))
 	}
 	stateDirectory := os.Getenv("AWG_CONTROL_HELPER_STATE")
 	if stateDirectory == "" {
@@ -70,6 +78,6 @@ func run(args []string) error {
 		}
 		return errors.New("uninstall-prepare requires restore-suspended or leave-suspended")
 	default:
-		return errors.New("usage: awgctl <ssh-rpc|enforce|health|uninstall-prepare>")
+		return errors.New("usage: awgctl <ssh-rpc|ssh-relay-rpc|enforce|health|uninstall-prepare>")
 	}
 }

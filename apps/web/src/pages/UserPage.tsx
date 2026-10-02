@@ -2,7 +2,7 @@ import { useState, type FormEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
 
-import type { Connection } from "@awg-control/contracts";
+import type { Connection, ConnectionIssuance } from "@awg-control/contracts";
 
 import { api, ApiProblem } from "../api";
 import { AsyncPanel } from "../components/AsyncPanel";
@@ -48,7 +48,7 @@ export default function UserPage() {
   const instances = useQuery({ queryKey: ["instances", user.data?.user.nodeId], queryFn: () => api.instances(user.data!.user.nodeId), enabled: Boolean(user.data?.user.nodeId) });
   const quotas = useQuery({ queryKey: ["quotas"], queryFn: api.quotas });
   const [showIssue, setShowIssue] = useState(false);
-  const [issued, setIssued] = useState<{ connection: Connection; clientConfig: string } | null>(null);
+  const [issued, setIssued] = useState<ConnectionIssuance | null>(null);
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
 
@@ -92,7 +92,7 @@ export default function UserPage() {
       </AsyncPanel>
       {showIssue ? <Modal title={t("issueConnection")} onClose={() => setShowIssue(false)}><form onSubmit={(event) => void issue(event)}>
         <label>{t("deviceName")}<input name="name" required maxLength={120} /></label>
-        <label>{t("instance")}<select name="instanceId" required>{instances.data?.items.filter((item) => item.mode === "managed").map((item) => <option key={item.id} value={item.id}>{item.displayName}</option>)}</select></label>
+        <label>{t("instance")}<select name="instanceId" required>{instances.data?.items.filter((item) => item.mode === "managed").map((item) => <option key={item.id} value={item.id}>{item.displayName} (AWG {item.protocolVersion})</option>)}</select></label>
         <label>{t("expiresAt")}<input name="expiresAt" type="datetime-local" /></label>
         <label>{t("quotas")}<select name="quotaPolicyId"><option value="">—</option>{quotas.data?.items.filter((quota) => quota.nodeId === user.data?.user.nodeId).map((quota) => <option key={quota.id} value={quota.id}>{quota.name}</option>)}</select></label>
         {error ? <p className="form-error">{error}</p> : null}

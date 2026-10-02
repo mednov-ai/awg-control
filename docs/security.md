@@ -42,3 +42,7 @@ Unknown configuration structures disable mutation capabilities.
 4. Do not attach database backups without separately protecting the master key.
 5. If a one-time config was exposed, create a replacement Connection and revoke
    the old one; it cannot be reissued.
+
+## Relay transport and one-time variants
+
+Relay SSH credentials use purpose-bound `relay-transport-key:<relayId>` encryption, pinned host keys and a separate relay-only forced-command account. Relay RPC cannot dispatch VPN operations. Public numeric endpoints and fixed templates prevent configuration injection. No client VPN keys exist on the relay. Both browser variants share the original one-time secret rules. An uncertain mutation blocks further changes until reconciliation. See [relay guide](relay-guide.md).

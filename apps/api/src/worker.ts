@@ -3,6 +3,7 @@ import { ErrorCode, HELPER_PROTOCOL_VERSION, type HelperRequest } from "@awg-con
 import type { HelperClient } from "./helper/client.js";
 import { uuidv7 } from "./lib/ids.js";
 import type { Repository } from "./repository.js";
+import type { RelayService } from "./relay/service.js";
 
 interface StatsResult {
   peers: Array<{
@@ -38,6 +39,7 @@ export class PollingWorker {
   public constructor(
     private readonly repository: Repository,
     private readonly helper: HelperClient,
+    private readonly relay?: RelayService,
   ) {}
 
   public start(): void {
@@ -58,6 +60,10 @@ export class PollingWorker {
     try {
       const nodes = this.repository.nodesDueForPoll(5);
       await Promise.all(nodes.map(async (node) => this.pollNode(node)));
+      if (this.relay) {
+        const due = this.repository.relays.list().filter(r => !r.lastCheckedAt || Date.now() - Date.parse(r.lastCheckedAt) >= 60_000);
+        await Promise.all(due.slice(0, 5).map(async r => { try { await this.relay!.status(r.id); } catch { /* health is recorded without process output */ } }));
+      }
       this.applyRetention();
       this.repository.pruneSessions();
     } finally {

@@ -93,6 +93,18 @@ async function main(): Promise<void> {
             .run(encryptSecret(nextKey, `transport-key:${row.id}`, secret), row.id);
           secret.fill(0);
         }
+        const relays = database.prepare("SELECT id, transport_private_key_encrypted AS value FROM relay_servers")
+          .all() as Array<{ id: string; value: string }>;
+        for (const row of relays) {
+          const purpose = `relay-transport-key:${row.id}`;
+          const secret = decryptSecret(config.masterKey, purpose, row.value);
+          try {
+            database.prepare("UPDATE relay_servers SET transport_private_key_encrypted = ? WHERE id = ?")
+              .run(encryptSecret(nextKey, purpose, secret), row.id);
+          } finally {
+            secret.fill(0);
+          }
+        }
         const admins = database
           .prepare("SELECT id, totp_secret_encrypted AS value FROM admins WHERE totp_secret_encrypted IS NOT NULL")
           .all() as Array<{ id: string; value: string }>;

@@ -4,14 +4,17 @@ import { SshHelperClient } from "./helper/client.js";
 import { Repository } from "./repository.js";
 import { buildServer } from "./server.js";
 import { PollingWorker } from "./worker.js";
+import { SshRelayClient } from "./relay/client.js";
+import { RelayService } from "./relay/service.js";
 
 async function main(): Promise<void> {
   const config = loadConfig();
   const database = openDatabase(config.databasePath, config.migrationsPath);
   const repository = new Repository(database);
   const helper = new SshHelperClient(config.masterKey);
-  const server = await buildServer(config, repository, helper);
-  const worker = new PollingWorker(repository, helper);
+  const relayClient = new SshRelayClient(config.masterKey);
+  const server = await buildServer(config, repository, helper, relayClient);
+  const worker = new PollingWorker(repository, helper, new RelayService(repository, relayClient, helper));
   if (config.pollingEnabled) worker.start();
 
   const shutdown = async (): Promise<void> => {
@@ -30,4 +33,3 @@ main().catch((error: unknown) => {
   process.stderr.write(`AWG Control failed to start: ${message}\n`);
   process.exitCode = 1;
 });
-

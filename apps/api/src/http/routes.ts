@@ -7,6 +7,8 @@ import {
   ErrorCode,
   HELPER_PROTOCOL_VERSION,
   InstanceSchema,
+  ConnectionSchema,
+  RelayEndpointSchema,
   NodeSchema,
   OperationIdSchema,
   QuotaPolicySchema,
@@ -58,6 +60,7 @@ interface DiscoveryResult {
     displayName: string;
     adapter: "amneziawg-legacy" | "awg2" | "awg3";
     protocolVersion?: InstanceRecord["protocolVersion"];
+    udpPort?: number;
     containerRef: string;
     interfaceName: string;
     configRef: string;
@@ -235,6 +238,7 @@ export async function registerRoutes(
           sourceFingerprint: instance.sourceFingerprint,
           mode: instance.readOnly ? ("read-only" as const) : ("observed" as const),
           lastDiscoveredAt: utcNow(),
+          udpPort: instance.udpPort ?? null,
         }));
         const instances = repository.upsertInstances(id, discovered);
         repository.updateNodeHealth(id, "discovered", response.result.helperVersion, null);
@@ -493,6 +497,7 @@ export async function registerRoutes(
     {
       schema: {
         tags: ["connections"],
+        response: { 201: Type.Object({ connection: ConnectionSchema, clientConfig: Type.String(), relayEndpoint: Type.Union([RelayEndpointSchema, Type.Null()]) }, { additionalProperties: false }) },
         params: IdParams,
         headers: Type.Object({ "idempotency-key": OperationIdSchema }, { additionalProperties: true }),
         body: Type.Object(
@@ -539,6 +544,9 @@ export async function registerRoutes(
         throw conflict(ErrorCode.Conflict, "Connection issuance is already in progress");
       }
       const node = repository.getNodeSecret(user.nodeId)!;
+      // Snapshot metadata before the one-time response. No subsequent metadata lookup
+      // may turn a successfully committed peer into a failed issuance response.
+      const relayEndpoint = instance.protocolVersion === "3.1" ? repository.relays.endpoint(instance.id) : null;
       const connectionId = uuidv7();
       try {
         const response = await helper.call<CreateResult>(
@@ -616,7 +624,7 @@ export async function registerRoutes(
         }
         reply.header("Cache-Control", "no-store, max-age=0");
         reply.header("Pragma", "no-cache");
-        return reply.code(201).send({ connection, clientConfig: response.result.clientConfig });
+        return reply.code(201).send({ connection, clientConfig: response.result.clientConfig, relayEndpoint });
       } catch (error) {
         repository.finishIdempotency(scope, op, "failed", null, error instanceof AppError ? error.code : ErrorCode.InternalError);
         handleHelperError(error);

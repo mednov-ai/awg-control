@@ -19,3 +19,7 @@ Database changes require a numbered SQL migration, clean/upgrade/restore tests,
 backup behavior, and a matching `spec.md` update. API/RPC changes require schema
 and compatibility tests. Security-sensitive bug fixes require regression tests.
 
+
+## Relay verification
+
+Run `scripts/test-relay-lifecycle.sh` for disposable Ubuntu/nginx UDP integration. The fixture uses a process shim for systemctl and validates the actual unit syntax; full systemd/reboot and AWG tunnel acceptance remain pilot checks. Use Node 24 with the pinned pnpm for Panel tests; test key material is synthetic.

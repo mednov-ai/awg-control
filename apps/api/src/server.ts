@@ -15,6 +15,9 @@ import { registerAuthentication } from "./http/auth.js";
 import { AppError } from "./http/errors.js";
 import { registerRoutes } from "./http/routes.js";
 import type { Repository } from "./repository.js";
+import { SshRelayClient, type RelayClient } from "./relay/client.js";
+import { RelayService } from "./relay/service.js";
+import { registerRelayRoutes } from "./http/relay-routes.js";
 
 function requestOrigin(request: { protocol: string; hostname: string }): string {
   return `${request.protocol}://${request.hostname}`;
@@ -24,6 +27,7 @@ export async function buildServer(
   config: AppConfig,
   repository: Repository,
   helper: HelperClient,
+  relayClient?: RelayClient,
 ): Promise<FastifyInstance> {
   const app = Fastify({
     logger: {
@@ -107,6 +111,7 @@ export async function buildServer(
 
   await registerAuthentication(app, repository, config);
   await registerRoutes(app, repository, helper, config);
+  await registerRelayRoutes(app, repository, new RelayService(repository, relayClient ?? new SshRelayClient(config.masterKey), helper), config);
 
   app.get("/api/v1/openapi.json", async () => app.swagger());
 

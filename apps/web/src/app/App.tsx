@@ -7,6 +7,7 @@ import { useI18n } from "../i18n";
 import { LoginPage } from "../pages/LoginPage";
 
 const DashboardPage = lazy(() => import("../pages/DashboardPage"));
+const RelaysPage = lazy(() => import("../pages/RelaysPage"));
 const NodesPage = lazy(() => import("../pages/NodesPage"));
 const UsersPage = lazy(() => import("../pages/UsersPage"));
 const UserPage = lazy(() => import("../pages/UserPage"));
@@ -17,6 +18,7 @@ const SettingsPage = lazy(() => import("../pages/SettingsPage"));
 const navItems = [
   ["/", "dashboard", "◫"],
   ["/nodes", "nodes", "⬡"],
+  ["/relays", "relays", "⇄"],
   ["/users", "users", "◎"],
   ["/quotas", "quotas", "◒"],
   ["/audit", "audit", "≋"],
@@ -78,6 +80,7 @@ export function App() {
           <Routes>
             <Route path="/" element={<DashboardPage />} />
             <Route path="/nodes" element={<NodesPage />} />
+            <Route path="/relays" element={<RelaysPage />} />
             <Route path="/users" element={<UsersPage />} />
             <Route path="/users/:id" element={<UserPage />} />
             <Route path="/quotas" element={<QuotasPage />} />

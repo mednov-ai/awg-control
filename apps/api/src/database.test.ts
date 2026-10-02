@@ -22,7 +22,7 @@ describe("database migrations", () => {
     expect(tables.map(({ name }) => name)).toContain("audit_events");
     const columns = db.prepare("PRAGMA table_info(connections)").all() as Array<{ name: string }>;
     expect(columns.map(({ name }) => name)).toContain("quota_override_at");
-    expect(db.prepare("SELECT MAX(version) AS version FROM schema_migrations").get()).toMatchObject({ version: 5 });
+    expect(db.prepare("SELECT MAX(version) AS version FROM schema_migrations").get()).toMatchObject({ version: 6 });
     const instanceColumns = db.prepare("PRAGMA table_info(instances)").all() as Array<{ name: string }>;
     expect(instanceColumns.map(({ name }) => name)).toContain("protocol_version");
     expect(db.pragma("foreign_keys", { simple: true })).toBe(1);

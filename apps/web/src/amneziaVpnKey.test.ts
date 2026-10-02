@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import type { Connection, InstanceRecord } from "@awg-control/contracts";
 
+import { withRelayEndpoint } from "./relayConfig";
 import { createAmneziaVpnKey } from "./amneziaVpnKey";
 
 const connection = {
@@ -58,6 +59,18 @@ describe("AmneziaVPN connection key", () => {
       hostName: "vpn.example.test",
       port: 47300,
     });
+  });
+
+  it("uses the relay endpoint consistently in the compressed import and native config", () => {
+    const config = "[Interface]\nPrivateKey = SYNTHETIC-PRIVATE\nAddress = 10.8.3.2/32\nHeaderProtectionKey = SYNTHETIC-HEADER\nRandomTrailers = on\nDisableCookies = on\n[Peer]\nPublicKey = SYNTHETIC-SERVER\nEndpoint = 203.0.113.10:47300\n";
+    const derived = withRelayEndpoint(config, { routeId: "019a0000-0000-7000-8000-000000000001", host: "203.0.113.20", port: 50000 });
+    const decoded = decode(createAmneziaVpnKey(derived, connection, instance)) as { hostName: string; containers: Array<{ awg: { port: string; protocol_version: string; last_config: string } }> };
+    expect(decoded.hostName).toBe("203.0.113.20");
+    const awg = decoded.containers[0]!.awg;
+    expect(awg.port).toBe("50000"); expect(awg.protocol_version).toBe("3.1");
+    const native = JSON.parse(awg.last_config) as { config: string; hostName: string; port: number };
+    expect(native.hostName).toBe("203.0.113.20"); expect(native.port).toBe(50000);
+    expect(native.config===derived).toBe(true);
   });
 
   it("uses the AWG2 container and protocol marker", () => {

@@ -2,6 +2,13 @@ packages:
   - "apps/*"
   - "packages/*"
 
+# Security patch floors for compatible transitive dependency versions.
+overrides:
+  'fast-uri@3.1.7': 3.1.8
+  'fast-uri@4.1.4': 4.1.5
+  'brace-expansion@1.1.18': 1.1.21
+  'brace-expansion@5.0.9': 5.0.12
+
 onlyBuiltDependencies:
   - better-sqlite3
   - cpu-features

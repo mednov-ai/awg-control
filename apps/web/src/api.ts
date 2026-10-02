@@ -7,6 +7,7 @@ import type {
   Problem,
   QuotaPolicy,
   VpnUser,
+  RelayServer, RelayRoute, RelayOperation, RelayStatus, RegisterRelay, RelayAction, ConnectionIssuance,
 } from "@awg-control/contracts";
 
 export class ApiProblem extends Error {
@@ -90,7 +91,7 @@ export const api = {
     userId: string,
     body: { instanceId: string; name: string; expiresAt?: string | null; quotaPolicyId?: string | null },
   ) =>
-    request<{ connection: Connection; clientConfig: string }>(`/users/${encodeURIComponent(userId)}/connections`, {
+    request<ConnectionIssuance>(`/users/${encodeURIComponent(userId)}/connections`, {
       method: "POST",
       headers: { "Idempotency-Key": idempotency() },
       body: JSON.stringify(body),
@@ -127,5 +128,22 @@ export const api = {
   }),
   revokeOtherSessions: () => request<{ revoked: number }>("/auth/sessions/revoke-others", {
     method: "POST", headers: { "Idempotency-Key": idempotency() }, body: JSON.stringify({}),
+  }),
+  relays: () => request<{ items: RelayServer[] }>("/relays"),
+  relay: (id: string) => request<{ relay: RelayServer; routes: RelayRoute[]; operations: RelayOperation[] }>(`/relays/${encodeURIComponent(id)}`),
+  registerRelay: (body: RegisterRelay, operationId: string) => request<RelayServer>("/relays", {
+    method: "POST", headers: { "Idempotency-Key": operationId }, body: JSON.stringify(body),
+  }),
+  checkRelay: (id: string) => request<RelayStatus>(`/relays/${encodeURIComponent(id)}/check`, {
+    method: "POST", headers: { "Idempotency-Key": idempotency() }, body: "{}",
+  }),
+  relayAction: (id: string, action: Exclude<RelayAction, "status">, body: Record<string, unknown>, operationId: string) => request<RelayOperation>(`/relays/${encodeURIComponent(id)}/${action}`, {
+    method: "POST", headers: { "Idempotency-Key": operationId }, body: JSON.stringify(body),
+  }),
+  reconcileRelay: (id: string, operationId: string) => request<RelayOperation>(`/relays/${encodeURIComponent(id)}/operations/${encodeURIComponent(operationId)}/reconcile`, {
+    method: "POST", headers: { "Idempotency-Key": idempotency() }, body: "{}",
+  }),
+  deleteRelay: (id: string, operationId: string) => request<void>(`/relays/${encodeURIComponent(id)}`, {
+    method: "DELETE", headers: { "Idempotency-Key": operationId },
   }),
 };
