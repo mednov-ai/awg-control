@@ -61,6 +61,14 @@ assert not Path('/run/awg-control-relay').exists(), 'fixture must start without 
 initial=rpc('status','initial',{})
 installed=rpc('install','install',dict(expectedFingerprint=initial['sourceFingerprint']))
 unit=Path('/etc/systemd/system/awg-control-relay.service')
+# Helper runs under umask 077; DynamicUser must read its non-secret config.
+assert Path('/etc/awg-control-relay').stat().st_mode & 0o777 == 0o755
+assert Path('/etc/awg-control-relay/nginx.conf').stat().st_mode & 0o777 == 0o644
+assert Path('/var/lib/awg-control-relay').stat().st_mode & 0o777 == 0o700
+def unprivileged():
+ os.setgroups([]);os.setgid(65534);os.setuid(65534)
+subprocess.run(['/usr/bin/test','-r','/etc/awg-control-relay/nginx.conf'],preexec_fn=unprivileged,check=True)
+
 # Verify the real systemd unit's syntax separately from the process shim.
 subprocess.run(['/usr/bin/systemd-analyze','verify',str(unit)],check=True,capture_output=True)
 route=dict(id='019a0000-0000-7000-8000-000000000001',listenPort=47300,upstreamIpv4='203.0.113.10',upstreamPort=47301,enabled=True)

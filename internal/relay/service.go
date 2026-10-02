@@ -488,6 +488,19 @@ func (s *Service) Handle(request protocol.Request) protocol.Response {
 				return err
 			}
 		} else {
+			// awgctl has umask 077; DynamicUser needs traversal of this owned,
+			// non-secret configuration directory. State/journals stay root-only.
+			directory := s.path(filepath.Dir(ConfigPath))
+			if err := os.MkdirAll(directory, 0o755); err != nil {
+				return err
+			}
+			info, err := os.Lstat(directory)
+			if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+				return errors.New("unsafe relay config directory")
+			}
+			if err := os.Chmod(directory, 0o755); err != nil {
+				return err
+			}
 			if err := writeFile(s.path(ConfigPath), config, 0o644); err != nil {
 				return err
 			}

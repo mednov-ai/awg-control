@@ -19,7 +19,8 @@ can start their default service, so review port/service effects before installin
 The bootstrap script does not run apt, edit firewalls, or change that service.
 The dedicated relay uses a separate nginx process and systemd unit. Validation
 uses a private temporary pid path; systemd creates RuntimeDirectory on first
-start, so bootstrap does not pre-create it.
+start, so bootstrap does not pre-create it. The owned non-secret config
+directory/file use explicit 0755/0644 for DynamicUser; journals stay root-only.
 
 Generate a separate Ed25519 transport key for this relay. Install only its public
 key on the VM. Register its private key in Panel; Panel encrypts it with the

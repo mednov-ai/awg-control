@@ -147,3 +147,18 @@ production template unchanged and removes that temporary workspace afterwards.
 The fixture now starts without RuntimeDirectory and creates it only on simulated
 systemd start. Go race/vet and the corrected real-nginx UDP lifecycle passed.
 No relay service is installed yet; existing nginx/RepairDevice stayed unchanged.
+
+
+The signed v0.4.10 amd64 artifact from Release 37042337459 passed exact tag
+identity/checksum verification and was installed on Selectel while its image
+publication was pending. Its first real systemd start rejected config access:
+Helper umask 077 had made the newly created config directory 0700, preventing
+DynamicUser traversal. Transaction rollback stopped/disabled only the dedicated
+relay and removed its config/unit; nginx PID 550 and RepairDevice PID 105113
+were unchanged. The next correction explicitly sets only the owned non-secret
+config directory/file to 0755/0644, rejects a symlink directory, and retains
+root-only state permissions. The real UDP fixture now checks config readability
+under UID/GID 65534 in addition to a first-install absent runtime directory.
+
+The corrected fixture, including unprivileged read and root-only state checks,
+passed; full Go vet/race and shell syntax passed again.

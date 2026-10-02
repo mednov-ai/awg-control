@@ -737,3 +737,6 @@ uninstall и отсутствия неопределенных операций.
 
 Relay nginx validation uses an isolated root-only workspace and pid path; it
 does not require or create the service RuntimeDirectory before first install.
+Relay configuration directory/file permissions are explicitly 0755/0644 for
+DynamicUser traversal/read access despite Helper umask 077; root-only relay
+state, journals, snapshots and validation workspaces retain 0700/0600.
