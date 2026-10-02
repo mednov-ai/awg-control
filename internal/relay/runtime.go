@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -22,8 +23,34 @@ func run(command string, args ...string) error {
 	}
 	return nil
 }
+func validationConfig(config []byte, pid string) ([]byte, error) {
+	const directive = "pid /run/awg-control-relay/nginx.pid;"
+	if strings.Count(string(config), directive) != 1 {
+		return nil, errors.New("invalid managed relay pid directive")
+	}
+	return []byte(strings.Replace(string(config), directive, "pid "+pid+";", 1)), nil
+}
 func (SystemRuntime) Validate(path string) error {
-	return run("/usr/sbin/nginx", "-t", "-c", path, "-p", "/tmp/")
+	// nginx -t opens its pid file. The real RuntimeDirectory exists only after
+	// systemd starts the service; validation must not depend on or create it.
+	config, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	workspace, err := os.MkdirTemp(filepath.Dir(path), "nginx-check-")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(workspace)
+	candidate, err := validationConfig(config, filepath.Join(workspace, "nginx.pid"))
+	if err != nil {
+		return err
+	}
+	candidatePath := filepath.Join(workspace, "nginx.conf")
+	if err := os.WriteFile(candidatePath, candidate, 0o600); err != nil {
+		return err
+	}
+	return run("/usr/sbin/nginx", "-t", "-c", candidatePath, "-p", workspace+"/")
 }
 func (SystemRuntime) Active() bool {
 	return run("/usr/bin/systemctl", "is-active", "--quiet", Unit) == nil

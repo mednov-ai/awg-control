@@ -17,7 +17,9 @@ The operator must provide nginx-core, libnginx-mod-stream, iproute2, sudo,
 OpenSSH and systemd. Package installation is an operator action: nginx packages
 can start their default service, so review port/service effects before installing.
 The bootstrap script does not run apt, edit firewalls, or change that service.
-The dedicated relay uses a separate nginx process and systemd unit.
+The dedicated relay uses a separate nginx process and systemd unit. Validation
+uses a private temporary pid path; systemd creates RuntimeDirectory on first
+start, so bootstrap does not pre-create it.
 
 Generate a separate Ed25519 transport key for this relay. Install only its public
 key on the VM. Register its private key in Panel; Panel encrypts it with the

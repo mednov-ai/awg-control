@@ -25,7 +25,8 @@ Evidence and remaining gates are recorded in [verification.md](verification.md).
 Documentation and local checks for 4.1 are complete. Compatible Fastify, fast-uri
 and brace-expansion patch updates close the dependency audit findings; the final
 Node 24 / pnpm 11.9 audit, lint, typecheck, tests and build passed.
-No live deployment or client tunnel acceptance has been performed.
+Signed delivery and server preparation are in progress; no client tunnel
+acceptance has been performed. See verification.md for current evidence.
 
 The subsequent SSH-only check recorded in design.md supplies the target address
 and operator access details previously listed as missing in verification.md.

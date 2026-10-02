@@ -17,6 +17,6 @@ docker run --rm --cap-add NET_ADMIN -v "$TEMP_DIR:/fixture:ro" ubuntu:24.04 bash
   apt-get install -y -qq --no-install-recommends nginx-core libnginx-mod-stream python3 iproute2 sudo openssh-client systemd >/dev/null
   case "$(uname -m)" in aarch64) install /fixture/awgctl-arm64 /usr/local/sbin/awgctl ;; x86_64) install /fixture/awgctl-amd64 /usr/local/sbin/awgctl ;; *) exit 1 ;; esac
   ip addr add 203.0.113.10/32 dev lo
-  mkdir -p /run/awg-control-relay /var/lib/awg-control-relay
+  mkdir -p /var/lib/awg-control-relay
   python3 /fixture/fixture.py
 '

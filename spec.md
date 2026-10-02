@@ -734,3 +734,6 @@ snapshot несекретного relay endpoint. Browser формирует в�
 uninstall и отсутствия неопределенных операций. Bootstrap account/binary удаляются
 оператором отдельно. Amnezia и peers не затрагиваются. Детальный runbook и границы
 живой приемки: `docs/relay-guide.md`.
+
+Relay nginx validation uses an isolated root-only workspace and pid path; it
+does not require or create the service RuntimeDirectory before first install.

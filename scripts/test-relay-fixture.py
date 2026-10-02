@@ -33,6 +33,7 @@ if args[0]=='show':
    for child in children: f.write('worker:'+child+':'+repr(Path('/proc/'+child+'/cmdline').read_bytes())+'\\n')
  print(pid.read_text().strip() if running() else '0'); sys.exit(0)
 if args[0]=='start':
+ pid.parent.mkdir(mode=0o700,parents=True,exist_ok=True)
  subprocess.run(['/usr/sbin/nginx','-c','/etc/awg-control-relay/nginx.conf'],check=True)
 elif args[0]=='reload': os.kill(int(pid.read_text()),signal.SIGHUP); time.sleep(.2)
 elif args[0]=='enable': enabled.touch()
@@ -56,6 +57,7 @@ def rpc(action,operation,parameters):
   raise AssertionError(value.get('error',{}).get('code'))
  return value['result']
 
+assert not Path('/run/awg-control-relay').exists(), 'fixture must start without RuntimeDirectory'
 initial=rpc('status','initial',{})
 installed=rpc('install','install',dict(expectedFingerprint=initial['sourceFingerprint']))
 unit=Path('/etc/systemd/system/awg-control-relay.service')
