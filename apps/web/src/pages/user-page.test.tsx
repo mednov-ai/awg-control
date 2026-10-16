@@ -103,4 +103,24 @@ describe("connection issuance", () => {
     expect(screen.queryByLabelText("AmneziaVPN connection link")).not.toBeInTheDocument();
     expect(localStorage.getItem("clientConfig")).toBeNull();
   });
+  it("offers standard WireGuard router profiles with two endpoints and no Amnezia link", async () => {
+    const wgInstance: InstanceRecord = { ...instance, adapter: "wireguard", protocolVersion: "wireguard", displayName: "WireGuard / wg0" };
+    vi.mocked(api.instances).mockResolvedValue({ items: [wgInstance] });
+    const standardConfig = "[Interface]\nPrivateKey = SYNTHETIC-KEY\nAddress = 10.8.0.2/32\nDNS = 1.1.1.1\nMTU = 1280\n[Peer]\nPublicKey = SYNTHETIC-SERVER\nEndpoint = vpn.example.test:51820\nAllowedIPs = 0.0.0.0/0\nPersistentKeepalive = 25\n";
+    vi.mocked(api.issueConnection).mockResolvedValue({ connection, clientConfig: standardConfig,
+      relayEndpoint: { routeId: "019a0000-0000-7000-8000-000000000001", host: "203.0.113.20", port: 51821 } });
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: "+ Create connection" }));
+    await screen.findByRole("option", { name: "WireGuard / wg0 (WireGuard)" });
+    fireEvent.change(screen.getByLabelText("Device name"), { target: { value: "Router" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create and show once" }));
+    await screen.findByRole("heading", { name: "Via Selectel" });
+    expect(screen.getAllByRole("button", { name: "Download .conf" })).toHaveLength(2);
+    expect(screen.queryByLabelText("AmneziaVPN connection link")).not.toBeInTheDocument();
+    expect(screen.getByText(/import it into WireGuard on your router/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "I saved it — close forever" }));
+    expect(screen.queryByRole("heading", { name: "Via Selectel" })).not.toBeInTheDocument();
+    expect(clipboardWrite).not.toHaveBeenCalled();
+  });
+
 });

@@ -76,7 +76,7 @@ export class PollingWorker {
     try {
       const health = await this.helper.call<HealthResult>(node, request("health", {}));
       if (!health.ok) throw new Error(health.error.code);
-      if (health.result.protocolVersion !== HELPER_PROTOCOL_VERSION) throw new Error(ErrorCode.HelperIncompatible);
+      if (!["1.0", HELPER_PROTOCOL_VERSION].includes(health.result.protocolVersion)) throw new Error(ErrorCode.HelperIncompatible);
       const instances = this.repository.listInstances(node.node.id);
       await Promise.all(
         instances.map(async (instance) => {

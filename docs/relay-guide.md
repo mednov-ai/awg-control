@@ -146,3 +146,13 @@ relay reboot recovery. Do not capture configs, QR or import keys. Verify before/
 after VPN container IDs, start times/restarts, peer counts/safe fingerprints and
 existing public services. Local builds, listener checks and import success cannot
 complete these acceptance tasks. OpenSpec stays open until evidence is recorded.
+
+## Classic WireGuard extension
+
+Confirmed managed classic WireGuard Instances are also eligible. Use a separate
+free relay port alongside AWG 3.1, and match the selected interface's listen port
+to its exact published Docker UDP mapping. Unknown/ambiguous mappings fail closed.
+Direct and relayed standard .conf/QR profiles differ only by Endpoint; WireGuard
+vpn:// export is not offered. Existing AWG issuance remains unchanged. Follow
+[the router guide](wireguard-guide.md); each path needs actual-router traffic and
+Node exit-IP confirmation. The relay does not obfuscate classic WireGuard.

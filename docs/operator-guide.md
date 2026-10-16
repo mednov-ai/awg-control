@@ -148,3 +148,11 @@ accepted only after suspended peers were restored.
 ## Selectel UDP relay
 
 For the dedicated Ubuntu 24.04 VM, bootstrap, restricted access, service installation, route management, rollback and removal follow [the relay guide](relay-guide.md). VM/cloud firewall and OS/Helper upgrades remain reviewed operator actions. Relay service health and actual VPN tunnel acceptance are recorded separately.
+
+## Classic WireGuard for routers
+
+Prepare the separate WireGuard protocol with AmneziaVPN, then discover and manage
+its own Instance in AWG Control. Follow [the WireGuard guide](wireguard-guide.md)
+for side-by-side preparation, standard .conf/QR, direct/Selectel alternatives,
+migration 0007 backup/rollback and actual router acceptance. Panel never installs
+VPN containers; existing AWG peers and services must be preserved.

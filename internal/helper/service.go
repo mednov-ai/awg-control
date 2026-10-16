@@ -37,6 +37,23 @@ func rpcError(code, message string, retryable bool) *protocol.Error {
 }
 
 func (s *Service) Handle(request protocol.Request) protocol.Response {
+	if request.ProtocolVersion == "1.0" && request.Action != protocol.ActionDiscover && request.Action != protocol.ActionHealth {
+		var parameters struct {
+			InstanceID string        `json:"instanceId"`
+			Policies   []policyInput `json:"policies"`
+		}
+		_ = json.Unmarshal(request.Parameters, &parameters)
+		ids := []string{parameters.InstanceID}
+		for _, policy := range parameters.Policies {
+			ids = append(ids, policy.InstanceID)
+		}
+		for _, id := range ids {
+			instance, err := s.store.Instance(id)
+			if err == nil && instance.Adapter == "wireguard" {
+				return protocol.Failure(request.RequestID, "HELPER_INCOMPATIBLE", "WireGuard requires VPN RPC 1.1", false)
+			}
+		}
+	}
 	result, failure := s.dispatch(request)
 	if failure != nil {
 		return protocol.Failure(request.RequestID, failure.Code, failure.Message, failure.Retryable)
@@ -91,6 +108,9 @@ func (s *Service) discover(request protocol.Request) (any, *protocol.Error) {
 	}
 	public := make([]map[string]any, 0, len(instances))
 	for _, instance := range instances {
+		if request.ProtocolVersion == "1.0" && instance.Adapter == "wireguard" {
+			continue
+		}
 		public = append(public, map[string]any{
 			"id": instance.ID, "displayName": instance.DisplayName, "adapter": instance.Adapter,
 			"protocolVersion": instance.ProtocolVersion,
@@ -240,11 +260,32 @@ func (s *Service) create(request protocol.Request) (result any, failure *protoco
 	if err != nil {
 		return nil, rpcError("ADAPTER_READ_ONLY", "configuration structure is unsupported", false)
 	}
+	// Suspended/expired/quota peers are absent from active config but still reserve
+	// their addresses. Allocate against a transient document containing both sets.
+	allocationDocument, err := configdoc.Parse(original)
+	if err != nil {
+		return nil, rpcError("ADDRESS_POOL_UNAVAILABLE", "address pool is unsupported", false)
+	}
+	suspended, err := s.store.Suspended()
+	if err != nil {
+		return nil, rpcError("STATE_READ_FAILED", "reserved addresses are unavailable", true)
+	}
+	active := make(map[string]bool)
+	for _, peer := range allocationDocument.Peers() {
+		active[peer.PublicKey] = true
+	}
+	for _, peer := range suspended {
+		if peer.InstanceID == instance.ID && !active[peer.PublicKey] {
+			if err := allocationDocument.RestorePeer(peer.Section); err != nil {
+				return nil, rpcError("ADDRESS_POOL_UNAVAILABLE", "reserved address metadata is unsupported", false)
+			}
+		}
+	}
 	addressCIDR := params.AddressCIDR
 	if addressCIDR == "" {
-		addressCIDR, err = document.AllocateIPv4AddressCIDR()
+		addressCIDR, err = allocationDocument.AllocateIPv4AddressCIDR()
 	} else {
-		err = document.ValidateAvailableIPv4AddressCIDR(addressCIDR)
+		err = allocationDocument.ValidateAvailableIPv4AddressCIDR(addressCIDR)
 	}
 	if err != nil {
 		return nil, rpcError("ADDRESS_POOL_UNAVAILABLE", "a safe client address could not be allocated", false)

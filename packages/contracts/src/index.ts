@@ -2,7 +2,7 @@ import { Type } from "@sinclair/typebox";
 import type { Static } from "@sinclair/typebox";
 
 export const API_VERSION = "v1" as const;
-export const HELPER_PROTOCOL_VERSION = "1.0" as const;
+export const HELPER_PROTOCOL_VERSION = "1.1" as const;
 
 export const UuidSchema = Type.String({ format: "uuid" });
 export const TimestampSchema = Type.String({ format: "date-time" });
@@ -29,6 +29,7 @@ export const InstanceModeSchema = Type.Union([
 export type InstanceMode = Static<typeof InstanceModeSchema>;
 
 export const AWGProtocolVersionSchema = Type.Union([
+  Type.Literal("wireguard"),
   Type.Literal("legacy"),
   Type.Literal("2"),
   Type.Literal("3.0"),
@@ -79,7 +80,7 @@ export const InstanceSchema = Type.Object(
     id: UuidSchema,
     nodeId: UuidSchema,
     displayName: Type.String({ minLength: 1, maxLength: 120 }),
-    adapter: Type.Union([Type.Literal("amneziawg-legacy"), Type.Literal("awg2"), Type.Literal("awg3")]),
+    adapter: Type.Union([Type.Literal("amneziawg-legacy"), Type.Literal("awg2"), Type.Literal("awg3"), Type.Literal("wireguard")]),
     protocolVersion: AWGProtocolVersionSchema,
     containerRef: Type.String({ minLength: 1, maxLength: 128 }),
     interfaceName: Type.String({ minLength: 1, maxLength: 32 }),
@@ -254,6 +255,8 @@ export const ErrorCode = {
   HelperIncompatible: "HELPER_INCOMPATIBLE",
   HelperUnavailable: "HELPER_UNAVAILABLE",
   FingerprintConflict: "FINGERPRINT_CONFLICT",
+  ProtocolUnconfirmed: "PROTOCOL_UNCONFIRMED",
+  UdpMappingAmbiguous: "UDP_MAPPING_AMBIGUOUS",
   AdapterReadOnly: "ADAPTER_READ_ONLY",
   MutationRolledBack: "MUTATION_ROLLED_BACK",
   AddressPoolUnavailable: "ADDRESS_POOL_UNAVAILABLE",
@@ -291,7 +294,7 @@ export type HelperAction = Static<typeof HelperActionSchema>;
 
 export const HelperRequestSchema = Type.Object(
   {
-    protocolVersion: Type.Literal(HELPER_PROTOCOL_VERSION),
+    protocolVersion: Type.Union([Type.Literal("1.0"), Type.Literal(HELPER_PROTOCOL_VERSION)]),
     requestId: OperationIdSchema,
     operationId: OperationIdSchema,
     action: HelperActionSchema,
@@ -377,3 +380,19 @@ export const RelayStatusSchema = Type.Object({
   routes: Type.Array(RelayRemoteRouteSchema),
 }, { additionalProperties: false });
 export type RelayStatus = Static<typeof RelayStatusSchema>;
+
+// These labels are protocol names, shared by RU/EN UI and never inferred from images.
+export function instanceProtocolLabel(instance: Pick<InstanceRecord, "adapter" | "protocolVersion">): string {
+  return instance.adapter === "wireguard" ? "WireGuard" : `AWG ${instance.protocolVersion}`;
+}
+
+export function supportsRelay(instance: Pick<InstanceRecord, "adapter" | "protocolVersion" | "capabilities" | "mode">): boolean {
+  return instance.mode === "managed" && instance.capabilities.create && hasRelayProtocol(instance);
+}
+
+export function hasRelayProtocol(instance: Pick<InstanceRecord, "adapter" | "protocolVersion">): boolean {
+  return (
+    (instance.adapter === "awg3" && instance.protocolVersion === "3.1") ||
+    (instance.adapter === "wireguard" && instance.protocolVersion === "wireguard")
+  );
+}

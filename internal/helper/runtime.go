@@ -164,34 +164,43 @@ func hasAllFields(values map[string]string, required map[string]struct{}) bool {
 	return true
 }
 
-func profileForConfig(binaryName string, document *configdoc.Document) adapterProfile {
+func profileForConfig(binaryName string, document *configdoc.Document, standardWireGuard ...bool) adapterProfile {
 	markerFields := stringSet(
 		"Jc", "Jmin", "Jmax", "S1", "S2", "S3", "S4", "H1", "H2", "H3", "H4",
 		"HeaderProtectionKey", "ContentPaddingAddition", "RandomTrailers", "DisableCookies",
+		"RekeyAfterTime", "RekeyTimeout", "RejectAfterTime", "KeepaliveTimeout", "MaxHandshakeAttempts", "I1", "I2", "I3", "I4", "I5",
 	)
+	standardEngine := len(standardWireGuard) > 0 && standardWireGuard[0]
 	values := lowerValues(document.InterfaceValues(markerFields))
-	if values["headerprotectionkey"] != "" {
+	if values["headerprotectionkey"] != "" || values["randomtrailers"] != "" || values["disablecookies"] != "" || values["contentpaddingaddition"] != "" {
 		version := "3.0"
 		supported := false
 		if values["randomtrailers"] != "" && values["disablecookies"] != "" {
 			version = "3.1"
-			supported = hasAllFields(values, awg31RequiredFields)
+			supported = hasAllFields(values, awg31RequiredFields) && !standardEngine
 		}
 		return adapterProfile{
 			adapter: "awg3", protocolVersion: version, displayName: "AmneziaWG " + version,
 			clientFields: awg3ClientFields, supported: supported,
 		}
 	}
-	if binaryName == "awg" || values["jc"] != "" {
+	if binaryName == "wg" && len(values) == 0 && standardEngine {
+		return adapterProfile{adapter: "wireguard", protocolVersion: "wireguard", displayName: "WireGuard", clientFields: map[string]struct{}{}, supported: true}
+	}
+	legacyFields := stringSet("Jc", "Jmin", "Jmax", "S1", "S2", "H1", "H2", "H3", "H4")
+	if hasAllFields(values, legacyFields) && len(values) == len(legacyFields) {
+		return adapterProfile{adapter: "amneziawg-legacy", protocolVersion: "legacy", displayName: "AmneziaWG Legacy", clientFields: awg2ClientFields, supported: !standardEngine}
+	}
+	if binaryName == "awg" || len(values) > 0 {
 		return adapterProfile{
 			adapter: "awg2", protocolVersion: "2", displayName: "AmneziaWG 2",
 			clientFields: awg2ClientFields,
-			supported:    hasAllFields(values, awg2RequiredFields),
+			supported:    hasAllFields(values, awg2RequiredFields) && !standardEngine,
 		}
 	}
 	return adapterProfile{
-		adapter: "amneziawg-legacy", protocolVersion: "legacy", displayName: "AmneziaWG Legacy",
-		clientFields: map[string]struct{}{}, supported: binaryName == "wg",
+		adapter: "amneziawg-legacy", protocolVersion: "unknown", displayName: "Unconfirmed VPN protocol",
+		clientFields: map[string]struct{}{}, supported: false,
 	}
 }
 
@@ -216,7 +225,7 @@ func (r *DockerRuntime) Discover(existing []Instance) ([]Instance, error) {
 				continue
 			}
 			serverPublicKey := strings.TrimSpace(r.safeExec(containerID, binaryName, "show", interfaceName, "public-key"))
-			udpPort := r.udpPort(containerID)
+			udpPort := r.udpPort(containerID, binaryName, interfaceName)
 			instance, ok := known[containerID+"/"+interfaceName]
 			if !ok {
 				id, uuidErr := UUIDv7()
@@ -229,7 +238,7 @@ func (r *DockerRuntime) Discover(existing []Instance) ([]Instance, error) {
 			clientFields := map[string]string{}
 			profile := adapterProfile{adapter: "amneziawg-legacy", protocolVersion: "unknown", displayName: "Unsupported AmneziaWG"}
 			if parseErr == nil {
-				profile = profileForConfig(binaryName, document)
+				profile = profileForConfig(binaryName, document, r.standardWireGuard(containerID, interfaceName))
 				clientFields = document.InterfaceValuesWithCommented(profile.clientFields, commentedClientFields)
 			}
 			managed := writable && parseErr == nil && profile.supported && serverPublicKey != "" && udpPort > 0
@@ -280,6 +289,7 @@ func (r *DockerRuntime) findConfig(containerID, interfaceName string) (string, b
 		return "", false, nil
 	}
 	candidates := []string{
+		"/opt/amnezia/wireguard/" + interfaceName + ".conf",
 		"/opt/amnezia/awg/" + interfaceName + ".conf",
 		"/opt/amnezia/awg2/" + interfaceName + ".conf",
 		"/etc/wireguard/" + interfaceName + ".conf",
@@ -308,34 +318,65 @@ func (r *DockerRuntime) safeExec(containerID string, command ...string) string {
 	return string(output)
 }
 
-func (r *DockerRuntime) udpPort(containerID string) int {
+// standardWireGuard confirms the kernel link kind, not the container or tools name.
+// Userspace/TUN and unavailable iproute2 probes remain unconfirmed and read-only.
+func (r *DockerRuntime) standardWireGuard(containerID, interfaceName string) bool {
+	if !interfacePattern.MatchString(interfaceName) {
+		return false
+	}
+	output, err := r.exec(containerID, "ip", "-details", "-json", "link", "show", "dev", interfaceName)
+	if err != nil {
+		return false
+	}
+	var links []struct {
+		IfName   string `json:"ifname"`
+		LinkInfo struct {
+			Kind string `json:"info_kind"`
+		} `json:"linkinfo"`
+	}
+	return json.Unmarshal(output, &links) == nil && len(links) == 1 && links[0].IfName == interfaceName && links[0].LinkInfo.Kind == "wireguard"
+}
+
+func (r *DockerRuntime) udpPort(containerID, binaryName, interfaceName string) int {
+	if !interfacePattern.MatchString(interfaceName) || (binaryName != "wg" && binaryName != "awg") {
+		return 0
+	}
+	listen, err := r.exec(containerID, binaryName, "show", interfaceName, "listen-port")
+	if err != nil {
+		return 0
+	}
+	port, err := strconv.Atoi(strings.TrimSpace(string(listen)))
+	if err != nil || port < 1 || port > 65535 {
+		return 0
+	}
 	output, err := r.docker([]string{"inspect", "--format={{json .NetworkSettings.Ports}}", containerID}, nil, 1024*1024)
 	if err != nil {
 		return 0
 	}
 	var bindings map[string][]struct {
+		HostIP   string `json:"HostIp"`
 		HostPort string `json:"HostPort"`
 	}
 	if json.Unmarshal(output, &bindings) != nil {
 		return 0
 	}
-	ports := make([]int, 0)
-	for key, values := range bindings {
-		if !strings.HasSuffix(key, "/udp") {
+	result := 0
+	for _, binding := range bindings[strconv.Itoa(port)+"/udp"] {
+		// IPv6 mirror of the same published port is allowed; restricted IPv4 bindings
+		// require separate reachability support and cannot be guessed from Node.host.
+		if binding.HostIP == "::" {
 			continue
 		}
-		for _, value := range values {
-			portValue, parseErr := strconv.Atoi(value.HostPort)
-			if parseErr == nil && portValue > 0 && portValue <= 65535 {
-				ports = append(ports, portValue)
-			}
+		if binding.HostIP != "0.0.0.0" {
+			return 0
 		}
+		value, err := strconv.Atoi(binding.HostPort)
+		if err != nil || value < 1 || value > 65535 || (result != 0 && result != value) {
+			return 0
+		}
+		result = value
 	}
-	if len(ports) == 0 {
-		return 0
-	}
-	sort.Ints(ports)
-	return ports[0]
+	return result
 }
 
 func (r *DockerRuntime) ReadConfig(instance Instance) ([]byte, error) {
@@ -413,6 +454,18 @@ func (r *DockerRuntime) Stats(instance Instance) ([]PeerStats, error) {
 func (r *DockerRuntime) Apply(instance Instance, operationID string, original, updated []byte, expectedPublicKey string, shouldExist bool) error {
 	if !validInstance(instance) || !safeID(operationID) {
 		return errors.New("invalid transaction metadata")
+	}
+	// Revalidate old stored Legacy records as well as the new adapter before mutation.
+	// This prevents an old 1.0 caller from mutating a previously misclassified WG peer.
+	if instance.Adapter == "wireguard" || instance.Adapter == "amneziawg-legacy" {
+		document, err := configdoc.Parse(original)
+		if err != nil {
+			return errors.New("protocol identity is unconfirmed")
+		}
+		profile := profileForConfig(instance.Binary, document, r.standardWireGuard(instance.ContainerID, instance.InterfaceName))
+		if !profile.supported || profile.adapter != instance.Adapter {
+			return errors.New("protocol identity is unconfirmed")
+		}
 	}
 	mode, owner, err := r.configurationMetadata(instance)
 	if err != nil {
@@ -611,11 +664,14 @@ func buildClientConfig(instance Instance, privateKey, addressCIDR, endpointHost 
 	builder.WriteString("\nAddress = ")
 	builder.WriteString(addressCIDR)
 	builder.WriteString("\nDNS = 1.1.1.1\n")
-	if instance.Adapter == "awg3" {
+	if instance.Adapter == "awg3" || instance.Adapter == "wireguard" {
 		builder.WriteString("MTU = 1280\n")
 	}
 	keys := make([]string, 0, len(instance.ClientFields))
 	for key := range instance.ClientFields {
+		if instance.Adapter == "wireguard" {
+			continue
+		}
 		keys = append(keys, key)
 	}
 	sort.Strings(keys)
@@ -629,7 +685,11 @@ func buildClientConfig(instance Instance, privateKey, addressCIDR, endpointHost 
 	builder.WriteString(instance.ServerPublicKey)
 	builder.WriteString("\nEndpoint = ")
 	builder.WriteString(hostPort(endpointHost, instance.UDPPort))
-	builder.WriteString("\nAllowedIPs = 0.0.0.0/0, ::/0\nPersistentKeepalive = 25\n")
+	if instance.Adapter == "wireguard" {
+		builder.WriteString("\nAllowedIPs = 0.0.0.0/0\nPersistentKeepalive = 25\n")
+	} else {
+		builder.WriteString("\nAllowedIPs = 0.0.0.0/0, ::/0\nPersistentKeepalive = 25\n")
+	}
 	return builder.String(), nil
 }
 

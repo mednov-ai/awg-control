@@ -258,7 +258,7 @@ export class RelayRepository {
           r.upstreamPort,
           Number(r.enabled),
           r.createdAt,
-          utcNow(),
+          r.updatedAt,
         );
       this.health(
         relayId,

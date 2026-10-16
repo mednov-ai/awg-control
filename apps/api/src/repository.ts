@@ -431,6 +431,10 @@ export class Repository {
          capabilities_json, source_fingerprint, mode, last_discovered_at, udp_port
        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(node_id, container_ref, interface_name) DO UPDATE SET
+         mode = CASE WHEN instances.adapter != excluded.adapter OR instances.protocol_version != excluded.protocol_version
+           THEN CASE WHEN excluded.mode = 'read-only' THEN 'read-only' ELSE 'observed' END
+           WHEN excluded.mode = 'read-only' THEN 'read-only'
+           WHEN instances.mode = 'read-only' THEN 'observed' ELSE instances.mode END,
          display_name = excluded.display_name,
          adapter = excluded.adapter,
          protocol_version = excluded.protocol_version,

@@ -43,3 +43,11 @@ then reload. If any step fails, remove or disable only that new site and restore
 its saved prior file if it existed. The existing `play-and-say.ru` route must
 remain pointed at `127.0.0.1:3000`; Docker, AWG2, AWG 3.1 and their peers remain
 outside the rollback scope.
+
+## WireGuard router pilot
+
+Use the current VPN/Panel hostname, never Play&Say DNS, and follow
+[the WireGuard guide](wireguard-guide.md). Adding WireGuard via AmneziaVPN,
+creating/revoking disposable peers, changing relay routes and reboot testing are
+separate scoped operator actions. No health/build check closes actual-router
+acceptance. Preserve existing AWG route, peers and service/container timings.

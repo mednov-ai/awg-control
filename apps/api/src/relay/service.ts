@@ -1,6 +1,8 @@
 import { isIP } from "node:net";
 import {
   RELAY_PROTOCOL_VERSION,
+  HELPER_PROTOCOL_VERSION,
+  supportsRelay,
   type RelayAction,
   type RelayRoute,
   type RelayRequest,
@@ -211,14 +213,11 @@ export class RelayService {
         const instanceId = String(body.instanceId);
         const instance = this.repository.getInstance(instanceId);
         if (
-          !instance ||
-          instance.protocolVersion !== "3.1" ||
-          instance.mode !== "managed" ||
-          !instance.capabilities.create
+          !instance || !supportsRelay(instance)
         )
           throw conflict(
             "ADAPTER_READ_ONLY",
-            "A managed AWG 3.1 Instance is required",
+            "A confirmed managed AWG 3.1 or WireGuard Instance is required",
           );
         const node = this.repository.getNodeSecret(instance.nodeId)!;
         if (!publicIpv4(node.node.host))
@@ -231,12 +230,13 @@ export class RelayService {
           instances: Array<{
             id: string;
             protocolVersion?: string;
+            adapter?: string;
             udpPort?: number;
             readOnly?: boolean;
             sourceFingerprint: string;
           }>;
         }>(node, {
-          protocolVersion: "1.0",
+          protocolVersion: HELPER_PROTOCOL_VERSION,
           requestId: uuidv7(),
           operationId: uuidv7(),
           action: "discover",
@@ -247,9 +247,13 @@ export class RelayService {
         const found = discovery.result.instances.find(
           (i) => i.id === instance.id,
         );
+        if (found && (!Number.isInteger(found.udpPort) || found.udpPort! < 1 || found.udpPort! > 65535)) {
+          throw conflict("UDP_MAPPING_AMBIGUOUS", "The selected interface has no unambiguous public UDP mapping");
+        }
         if (
           !found ||
-          found.protocolVersion !== "3.1" ||
+          found.protocolVersion !== instance.protocolVersion ||
+          found.adapter !== instance.adapter ||
           found.readOnly !== false ||
           !Number.isInteger(found.udpPort) ||
           found.udpPort! < 1 ||
@@ -258,7 +262,7 @@ export class RelayService {
         )
           throw conflict(
             "HELPER_INCOMPATIBLE",
-            "Fresh AWG 3.1 UDP discovery is required",
+            "Fresh confirmed VPN protocol and unambiguous UDP discovery are required",
           );
         if (found.sourceFingerprint !== instance.sourceFingerprint)
           throw conflict(
@@ -306,7 +310,7 @@ export class RelayService {
           action === "remove"
             ? routes.filter((r) => r.id !== route.id)
             : routes.map((r) =>
-                r.id === route.id ? { ...r, enabled: false } : r,
+                r.id === route.id ? { ...r, enabled: false, updatedAt: utcNow() } : r,
               );
       } else if (action === "uninstall") routes = [];
       stored = this.repository.relays.begin(id, op, action, hash, {

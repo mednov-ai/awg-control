@@ -1,8 +1,8 @@
 # AWG Control — спецификация продукта
 
 Статус: проектирование v1  
-Версия документа: 0.4
-Дата актуализации: 2026-10-02
+Версия документа: 0.5
+Дата актуализации: 2026-10-16
 
 ## 1. Назначение документа
 
@@ -29,7 +29,7 @@ AWG Control — self-hosted web-панель для существующих и 
 
 ## 3. Цели v1
 
-1. Подключаться к уже работающим AmneziaWG Legacy, AWG2 и AWG 3.1 без остановки VPN.
+1. Подключаться к уже работающим AmneziaWG Legacy, AWG2, AWG 3.1 и классическим WireGuard без остановки VPN.
 2. Обнаруживать фактическую конфигурацию, интерфейс и управляющий бинарник, а не полагаться только на имя контейнера.
 3. Импортировать существующие peers без необходимости знать их клиентские приватные ключи.
 4. Создавать пользователей и несколько подключений устройств для каждого пользователя.
@@ -44,7 +44,7 @@ AWG Control — self-hosted web-панель для существующих и 
 
 - собственная реализация VPN-протокола;
 - установка или обновление самих контейнеров Amnezia через Panel API; отдельный
-  AWG 3.1 instance разворачивается оператором и затем проходит обычный discovery;
+  AWG 3.1 или WireGuard instance разворачивается оператором и затем проходит обычный discovery;
 - мобильный VPN-клиент;
 - пользовательский кабинет для конечных пользователей;
 - OIDC/LDAP/SSO;
@@ -119,6 +119,7 @@ Frontend собирается в статические файлы и обслу
 
 | Семейство | Типичный бинарник | Типичный интерфейс | Примечание |
 | --- | --- | --- | --- |
+| WireGuard | `wg` | `wg0` | Стандартный протокол, отдельный контейнер AmneziaVPN; подтвержденный runtime |
 | AmneziaWG Legacy | `wg` | `wg0` | Legacy-установки Amnezia |
 | AWG2 | `awg` или совместимый `wg` | `awg0` | Новое поколение AmneziaWG |
 | AWG 3.1 | `awg` | `awg0` | Отдельный instance со своим контейнером, UDP-портом, подсетью и конфигурацией |
@@ -236,9 +237,9 @@ Node по необходимости сохраняет только серве�
 ### 11.3 Instance
 
 - `id`, `nodeId`, `displayName`
-- `adapter`: amneziawg-legacy/awg2/awg3
-- `protocolVersion`: legacy/2/3.0/3.1/unknown; поддерживаемые для мутаций
-  сочетания — legacy, AWG2 `2` и AWG3 `3.1`; остальные fail closed в read-only
+- `adapter`: amneziawg-legacy/awg2/awg3/wireguard
+- `protocolVersion`: legacy/2/3.0/3.1/wireguard/unknown; поддерживаемые для мутаций
+  сочетания — legacy, AWG2 `2`, AWG3 `3.1` и WireGuard `wireguard`; остальные fail closed в read-only
 - `containerRef`, `interfaceName`, `configRef`
 - `capabilitiesJson`
 - `sourceFingerprint`
@@ -412,7 +413,16 @@ Helper никогда не выполняет строку как shell и не 
 - Первый admin создаётся одноразовой CLI-командой, а не default password.
 - Опциональный TOTP доступен в v1; recovery codes показываются один раз и хранятся как hash.
 
-Production Panel публикуется на отдельном origin `https://awg.play-and-say.ru`. Контейнер по умолчанию остаётся привязан к `127.0.0.1:8080`; отдельный nginx virtual host перенаправляет HTTP на HTTPS, завершает TLS, перезаписывает forwarding headers и проксирует только на этот loopback endpoint. API доверяет ровно одному локальному reverse-proxy hop и проверяет unsafe Origin строго против настроенного public origin. Существующий virtual host `play-and-say.ru` и upstream `127.0.0.1:3000` не изменяются.
+Production Panel публикуется на отдельном origin `https://wg.cbrgn.mooo.com`. Контейнер по умолчанию остаётся привязан к `127.0.0.1:8080`; отдельный nginx virtual host перенаправляет HTTP на HTTPS, завершает TLS, перезаписывает forwarding headers и проксирует только на этот loopback endpoint. API доверяет ровно одному локальному reverse-proxy hop и проверяет unsafe Origin строго против настроенного public origin. Существующий virtual host `play-and-say.ru` и upstream `127.0.0.1:3000` не изменяются.
+
+16 октября 2026 Panel перенесена с `https://awg.play-and-say.ru` на
+`https://wg.cbrgn.mooo.com` после переноса DNS Play&Say на другой сервер.
+Новый origin и сертификат применены после проверки DNS и SQLite backup.
+Результаты и rollback описаны в `docs/panel-domain-migration-2026-10-16.md`.
+Перенос меняет только адрес публикации Panel; loopback bind, строгая проверка
+Origin и защита cookie сохранены. Диагностические скрипты по умолчанию проверяют
+новый Panel hostname и прежний VPN-сервер `89.124.107.104`; домен Play&Say
+больше не определяет адрес этого сервера.
 - API не поддерживает CORS по умолчанию.
 - Content Security Policy запрещает сторонние scripts и передачу QR payload наружу.
 - Журналы используют allowlist полей; request/response body для issuance endpoint не логируется.
@@ -609,7 +619,7 @@ GitHub Actions должен выполнять:
 
 ### Production publication acceptance
 
-- `awg.play-and-say.ru` обслуживается действующим TLS certificate через отдельный
+- `wg.cbrgn.mooo.com` обслуживается действующим TLS certificate через отдельный
   nginx virtual host, а Panel слушает только `127.0.0.1:8080`;
 - HTTP перенаправляется на HTTPS без credentials, nginx перезаписывает forwarded
   metadata, а `play-and-say.ru` продолжает работать через прежний upstream;
@@ -672,7 +682,7 @@ v1 считается готовой, когда:
 ## 22. Управляемый UDP relay (Selectel)
 
 Panel управляет отдельным UDP relay на уже подготовленной Ubuntu 24.04 VM.
-Трафик следует client → relay → текущий AWG 3.1 → Internet; VPN завершается и
+Трафик следует client → relay → текущий AWG 3.1 или WireGuard → Internet; VPN завершается и
 выходной IP определяется текущим Node. Relay не получает VPN-ключи и не является
 VPN Node. AWG2 не проксируется в первой версии. Создание VM и изменение облачного/
 host firewall выполняются оператором отдельно.
@@ -681,7 +691,7 @@ host firewall выполняются оператором отдельно.
 `awg-control-relay-agent`, forced-command `ssh-relay-rpc` и точный sudo rule.
 Panel использует отдельный зашифрованный transport key с purpose
 `relay-transport-key:<relayId>` и закрепленный SSH host fingerprint. Relay RPC
-1.1 поддерживает также 1.0; VPN RPC сохраняет текущий 1.0 контракт. Операции
+1.1 поддерживает также 1.0; VPN RPC 1.1 сохраняет поддержку предыдущего 1.0 для AWG. Операции
 relay не имеют доступа к VPN runtime и не принимают shell-команды, пути или
 nginx-директивы. Node discovery добавляет безопасный `udpPort`; старые Helpers
 остаются совместимыми, но не могут использоваться для relay без обновления.
@@ -709,7 +719,7 @@ error code и UTC timestamps; один relay имеет не более одно
 Администратор регистрирует relay через `/api/v1/relays`, проверяет `/check`,
 применяет `/install`, `/update`, `/apply`, `/disable`, `/remove`, `/uninstall` и
 сверяет `/operations/{operationId}/reconcile`. Unsafe requests требуют сессии,
-Origin и Idempotency-Key. Маршрут требует managed AWG 3.1 и свежего discovery;
+Origin и Idempotency-Key. Маршрут требует managed AWG 3.1 или подтвержденного WireGuard и свежего discovery;
 upstream определяется из зарегистрированного публичного IPv4 Node и UDP-port,
 а не из ввода администратора. OpenAPI генерируется из Fastify schemas.
 
@@ -740,3 +750,59 @@ does not require or create the service RuntimeDirectory before first install.
 Relay configuration directory/file permissions are explicitly 0755/0644 for
 DynamicUser traversal/read access despite Helper umask 077; root-only relay
 state, journals, snapshots and validation workspaces retain 0700/0600.
+
+
+## 27. Классический WireGuard
+
+WireGuard устанавливается оператором средствами AmneziaVPN как отдельный контейнер
+рядом с AWG 3.1: собственные UDP-порт, непересекающаяся подсеть и persistent config.
+Panel не устанавливает VPN. Положительное подтверждение стандартного kernel
+runtime (link kind wireguard) и конфигурации обязательно: имя wg, image/container
+name и отсутствие AWG полей сами по себе недостаточны. Userspace/неоднозначные
+runtime остаются read-only. Все активные AWG-маркеры проверяются прежде fallback;
+неполные 3.x не становятся WireGuard. Discovery не изменяет VPN. Смена adapter/
+protocol сохраняет Instance и Connections, но сбрасывает management до подтверждения.
+
+VPN RPC 1.1 поддерживает предыдущий 1.0 для AWG; WireGuard через 1.0 не выдается
+как Legacy и не допускает мутаций. Panel проверяет поддержку через health 1.0.
+Старый Helper остается совместимым с AWG, но WireGuard требует 1.1.
+Relay RPC остается независимым 1.1/1.0 и не меняет модель доверия.
+Миграция 0007 расширяет Instance adapter/protocol CHECK constraints, сохраняет
+udp_port, IDs, FK Connections/relay_routes и индекс резервирования адресов 0005.
+Backup registry — schema_migrations; rollback — matching backup и предыдущий image.
+
+WireGuard использует общий lock/snapshot/validation/no-restart syncconf/verification/
+rollback pipeline, компенсацию нового peer при ошибке Panel commit и автоматическую
+/32 адресацию. Сроки, квоты, счетчики и сохранение адресов при suspend/expiry/error
+остаются общими. Client template содержит только стандартные поля: IPv4 /32,
+DNS 1.1.1.1, MTU 1280, AllowedIPs 0.0.0.0/0, keepalive 25; AWG поля, server-only
+ключи и исполняемые hooks в него не попадают. IPv6 egress и site-to-site не входят
+в поддержку; runbook описывает предотвращение непреднамеренного IPv6 bypass.
+
+Выдача стандартного .conf/QR одноразовая, no-store, только transient memory,
+без shared caches/логов/снимков/browser persistence. WireGuard не требует vpn://;
+этот экспорт скрыт, существующий AWG экспорт сохраняется. Повтор успешного operation
+возвращает CONFIG_ALREADY_ISSUED без секрета. Закрытие очищает обе альтернативы.
+
+Selectel route разрешен для подтвержденного managed WireGuard или AWG 3.1 при
+fresh discovery. UDP mapping сопоставляется с listen port конкретного интерфейса;
+неоднозначность отклоняется, первый произвольный published port не выбирается.
+WireGuard получает отдельный relay listen port, сохраняя действующий AWG route.
+Direct и relay профили одного Connection отличаются только Peer Endpoint и
+используются поочередно одним устройством. VPN завершается на Node, а не Selectel;
+relay не получает VPN ключи и не добавляет маскировку WireGuard.
+
+Готовность требует unit/API/RPC/migration/rollback/security tests и disposable
+WireGuard direct/relay integration, затем отдельную приемку на реальном роутере:
+model/firmware, handshake, двусторонний трафик, LAN DNS/Internet, Node exit IP,
+IPv6 policy, idle/reconnect и сохранение existing AWG peers/services. Health или
+импорт профиля не заменяют tunnel acceptance. Live установка/peer/relay/reboot
+выполняются только в согласованном operator scope, без рестарта existing VPN.
+
+
+Операторский pilot WireGuard может использовать закрепленную startup-логику
+AmneziaVPN с поддерживаемой Alpine base и минимальным NET_ADMIN вместо общего
+privileged/SYS_MODULE. Это отдельная операторская установка, не функция Panel.
+Legacy распознается по полному legacy-набору активных полей без AWG2/3 расширений,
+даже если его совместимый инструмент называется awg; конфликт с kernel WireGuard
+оставляет Instance read-only.

@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
 
+import { instanceProtocolLabel } from "@awg-control/contracts";
 import type { Connection, ConnectionIssuance } from "@awg-control/contracts";
 
 import { api, ApiProblem } from "../api";
@@ -92,7 +93,8 @@ export default function UserPage() {
       </AsyncPanel>
       {showIssue ? <Modal title={t("issueConnection")} onClose={() => setShowIssue(false)}><form onSubmit={(event) => void issue(event)}>
         <label>{t("deviceName")}<input name="name" required maxLength={120} /></label>
-        <label>{t("instance")}<select name="instanceId" required>{instances.data?.items.filter((item) => item.mode === "managed").map((item) => <option key={item.id} value={item.id}>{item.displayName} (AWG {item.protocolVersion})</option>)}</select></label>
+        <label>{t("instance")}<select name="instanceId" required>{instances.data?.items.filter((item) => item.mode === "managed" && item.capabilities.create).map((item) => <option key={item.id} value={item.id}>{item.displayName} ({instanceProtocolLabel(item)})</option>)}</select></label>
+        {instances.data && !instances.data.items.some(item => item.adapter === "wireguard") ? <p className="muted">{t("wireguardSetupHelp")}</p> : null}
         <label>{t("expiresAt")}<input name="expiresAt" type="datetime-local" /></label>
         <label>{t("quotas")}<select name="quotaPolicyId"><option value="">—</option>{quotas.data?.items.filter((quota) => quota.nodeId === user.data?.user.nodeId).map((quota) => <option key={quota.id} value={quota.id}>{quota.name}</option>)}</select></label>
         {error ? <p className="form-error">{error}</p> : null}

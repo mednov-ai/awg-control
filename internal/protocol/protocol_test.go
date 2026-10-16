@@ -32,3 +32,16 @@ func TestDecodeRequestAcceptsHealth(t *testing.T) {
 		t.Fatalf("unexpected action: %s", request.Action)
 	}
 }
+
+func TestPreviousMinorSupportedWithoutAcceptingFutureVersion(t *testing.T) {
+	for _, minor := range []string{"1.0", "1.1"} {
+		input := `{"protocolVersion":"` + minor + `","requestId":"req-1","operationId":"op-1","action":"health","parameters":{}}`
+		if _, err := DecodeRequest(strings.NewReader(input), "1.1"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	input := `{"protocolVersion":"1.2","requestId":"req-1","operationId":"op-1","action":"health","parameters":{}}`
+	if _, err := DecodeRequest(strings.NewReader(input), "1.1"); err == nil {
+		t.Fatal("future minor accepted")
+	}
+}

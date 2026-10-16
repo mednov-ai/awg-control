@@ -2,7 +2,7 @@ import { Client } from "ssh2";
 
 import type { HelperRequest, HelperResponse, RelayRequest } from "@awg-control/contracts";
 
-import type { NodeSecretRecord } from "../repository.js";
+import type { Repository, NodeSecretRecord } from "../repository.js";
 import { decryptSecret } from "../security/crypto.js";
 
 const MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
@@ -11,7 +11,7 @@ const FIXED_REMOTE_COMMAND = "awg-control-rpc";
 export class HelperTransportError extends Error {
   public constructor(
     message: string,
-    public readonly code: "HOST_KEY_MISMATCH" | "HELPER_UNAVAILABLE" | "INVALID_HELPER_RESPONSE",
+    public readonly code: "HOST_KEY_MISMATCH" | "HELPER_UNAVAILABLE" | "INVALID_HELPER_RESPONSE" | "HELPER_INCOMPATIBLE",
   ) {
     super(message);
     this.name = "HelperTransportError";
@@ -34,10 +34,32 @@ export class SshHelperClient implements HelperClient {
   public constructor(
     private readonly masterKey: Buffer,
     private readonly timeoutMs = 15_000,
+    private readonly repository?: Repository,
   ) {}
 
   public async call<T>(node: NodeSecretRecord, request: HelperRequest): Promise<HelperResponse<T>> {
-    return this.callRpc<T>(node.node, node.transportPrivateKeyEncrypted, `transport-key:${node.node.id}`, request, FIXED_REMOTE_COMMAND);
+    const send = <R>(value: HelperRequest) => this.callRpc<R>(node.node, node.transportPrivateKeyEncrypted, `transport-key:${node.node.id}`, value, FIXED_REMOTE_COMMAND);
+    // Negotiate via the previous-minor health contract, never by retrying a mutation.
+    const health = await send<{ protocolVersion: string }>({ ...request, protocolVersion: "1.0", action: "health", parameters: {} });
+    if (!health.ok) return health;
+    if (!health.result || typeof health.result !== "object" || typeof health.result.protocolVersion !== "string") {
+      throw new HelperTransportError("invalid Helper health response", "INVALID_HELPER_RESPONSE");
+    }
+    const protocolVersion = health.result.protocolVersion;
+    if (protocolVersion !== "1.0" && protocolVersion !== "1.1") {
+      throw new HelperTransportError("unsupported Helper protocol", "HELPER_INCOMPATIBLE");
+    }
+    if (protocolVersion === "1.0") {
+      if (request.action === "discover" && this.repository?.listInstances(node.node.id).some(i => i.adapter === "wireguard")) {
+        throw new HelperTransportError("Rediscovery of WireGuard requires VPN Helper RPC 1.1", "HELPER_INCOMPATIBLE");
+      }
+      const ids = [request.parameters.instanceId, ...(Array.isArray(request.parameters.policies)
+        ? request.parameters.policies.map((p: { instanceId?: unknown }) => p.instanceId) : [])];
+      if (ids.some(id => typeof id === "string" && this.repository?.getInstance(id)?.adapter === "wireguard")) {
+        throw new HelperTransportError("WireGuard requires VPN Helper RPC 1.1", "HELPER_INCOMPATIBLE");
+      }
+    }
+    return send<T>({ ...request, protocolVersion });
   }
 
   public async callRpc<T>(

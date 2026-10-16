@@ -46,3 +46,13 @@ Unknown configuration structures disable mutation capabilities.
 ## Relay transport and one-time variants
 
 Relay SSH credentials use purpose-bound `relay-transport-key:<relayId>` encryption, pinned host keys and a separate relay-only forced-command account. Relay RPC cannot dispatch VPN operations. Public numeric endpoints and fixed templates prevent configuration injection. No client VPN keys exist on the relay. Both browser variants share the original one-time secret rules. An uncertain mutation blocks further changes until reconciliation. See [relay guide](relay-guide.md).
+
+## Classic WireGuard
+
+WireGuard requires positive kernel runtime confirmation and active-config checks;
+missing AWG fields cannot grant mutation capabilities. RPC 1.0 cannot access new
+WireGuard operations, including stale IDs now known to be WireGuard. Mutations
+revalidate stored Legacy/WireGuard identities before apply. Standard one-time
+profiles contain only client fields, never AWG fields or server hooks. Relay
+keeps its restricted boundary and receives no VPN keys. IPv4-only profiles do
+not imply IPv6 protection; router acceptance must verify its explicit policy.

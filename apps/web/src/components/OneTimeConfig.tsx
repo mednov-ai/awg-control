@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 
+import { instanceProtocolLabel, hasRelayProtocol } from "@awg-control/contracts";
 import type { Connection, ConnectionIssuance, InstanceRecord } from "@awg-control/contracts";
 
 import { createAmneziaVpnKey } from "../amneziaVpnKey";
@@ -15,7 +16,7 @@ function ConfigVariant({ clientConfig, connection, instance, relay = false }: {
   const [qr, setQr] = useState<string | null>(null);
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
   const connectionKey = useMemo(() => {
-    if (!instance) return null;
+    if (!instance || instance.adapter === "wireguard") return null;
     try {
       return createAmneziaVpnKey(value.clientConfig, value.connection, instance);
     } catch {
@@ -61,7 +62,7 @@ function ConfigVariant({ clientConfig, connection, instance, relay = false }: {
         <div className="qr-box">{qr ? <img src={qr} alt={relay ? t("relayQrAlt") : t("qrAlt")} /> : <span>{t("loading")}</span>}</div>
         <div>
           <dl className="details-list">
-            {instance ? <><dt>{t("instance")}</dt><dd>{instance.displayName} (AWG {instance.protocolVersion})</dd></> : null}
+            {instance ? <><dt>{t("instance")}</dt><dd>{instance.displayName} ({instanceProtocolLabel(instance)})</dd></> : null}
             <dt>{t("connectionEndpoint")}</dt><dd className="mono">{clientConfig.match(/^\s*Endpoint\s*=\s*([^#;\r\n]+)/m)?.[1]?.trim() ?? "—"}</dd>
             <dt>{t("deviceName")}</dt><dd>{value.connection.name}</dd>
             <dt>{t("addressCidr")}</dt><dd className="mono">{value.connection.addressCidr}</dd>
@@ -88,11 +89,12 @@ export function OneTimeConfig({ value, instance, onForget }: {
 }) {
   const { t } = useI18n();
   const relayConfig = useMemo(() => {
-    if (!value.relayEndpoint || instance?.protocolVersion !== "3.1") return null;
+    if (!value.relayEndpoint || !instance || !hasRelayProtocol(instance)) return null;
     try { return withRelayEndpoint(value.clientConfig, value.relayEndpoint); } catch { return null; }
-  }, [value.clientConfig, value.relayEndpoint, instance?.protocolVersion]);
+  }, [value.clientConfig, value.relayEndpoint, instance]);
   return <Modal title={t("issuedTitle")} onClose={() => undefined} locked>
     <div className="warning-box">{t("issuedWarning")}</div>
+    {instance?.adapter === "wireguard" ? <p className="muted">{t("wireguardRouterHelp")}</p> : null}
     {relayConfig ? <><p className="muted">{t("relayDeviceGuidance")}</p><h3>{t("directConnection")}</h3></> : null}
     <ConfigVariant clientConfig={value.clientConfig} connection={value.connection} instance={instance} />
     {relayConfig ? <section className="relay-variant">

@@ -36,3 +36,8 @@ describe("instance contract", () => {
     expect(schema).toContain('"const":"3.1"');
   });
 });
+
+it("describes distinct WireGuard identity in the strict Instance schema", () => {
+  expect(InstanceSchema.additionalProperties).toBe(false);
+  expect(JSON.stringify(InstanceSchema)).toContain('"const":"wireguard"');
+});

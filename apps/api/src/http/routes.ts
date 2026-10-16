@@ -1,8 +1,10 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { Type } from "@sinclair/typebox";
+import { Value } from "@sinclair/typebox/value";
 
 import {
   API_VERSION,
+  supportsRelay,
   canTransitionConnection,
   ErrorCode,
   HELPER_PROTOCOL_VERSION,
@@ -58,7 +60,7 @@ interface DiscoveryResult {
   instances: Array<{
     id: string;
     displayName: string;
-    adapter: "amneziawg-legacy" | "awg2" | "awg3";
+    adapter: InstanceRecord["adapter"];
     protocolVersion?: InstanceRecord["protocolVersion"];
     udpPort?: number;
     containerRef: string;
@@ -240,7 +242,10 @@ export async function registerRoutes(
           lastDiscoveredAt: utcNow(),
           udpPort: instance.udpPort ?? null,
         }));
-        const instances = repository.upsertInstances(id, discovered);
+        if (discovered.some(instance => !Value.Check(InstanceSchema, { ...instance, nodeId: id, udpPort: instance.udpPort || null }))) {
+          throw new AppError(502, "INVALID_HELPER_RESPONSE", "Discovery returned an unsupported Instance contract");
+        }
+        const instances = repository.upsertInstances(id, discovered.map(instance => ({ ...instance, udpPort: instance.udpPort || null })));
         repository.updateNodeHealth(id, "discovered", response.result.helperVersion, null);
         repository.addAudit({
           adminId: request.admin!.id,
@@ -282,7 +287,7 @@ export async function registerRoutes(
       if (!instance) throw notFound("Instance not found");
       const op = operationId(request);
       if (!instance.capabilities.create || instance.mode === "read-only") {
-        throw conflict(ErrorCode.AdapterReadOnly, "Helper did not confirm safe mutation capabilities");
+        throw conflict(instance.protocolVersion === "unknown" ? ErrorCode.ProtocolUnconfirmed : ErrorCode.AdapterReadOnly, "Helper did not confirm safe mutation capabilities");
       }
       const scope = `instances.manage:${id}`;
       const start = repository.beginIdempotency(scope, op, requestFingerprint({ id }));
@@ -546,7 +551,7 @@ export async function registerRoutes(
       const node = repository.getNodeSecret(user.nodeId)!;
       // Snapshot metadata before the one-time response. No subsequent metadata lookup
       // may turn a successfully committed peer into a failed issuance response.
-      const relayEndpoint = instance.protocolVersion === "3.1" ? repository.relays.endpoint(instance.id) : null;
+      const relayEndpoint = supportsRelay(instance) ? repository.relays.endpoint(instance.id) : null;
       const connectionId = uuidv7();
       try {
         const response = await helper.call<CreateResult>(
