@@ -1,6 +1,5 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { Type } from "@sinclair/typebox";
-import { Value } from "@sinclair/typebox/value";
 
 import {
   API_VERSION,
@@ -242,7 +241,13 @@ export async function registerRoutes(
           lastDiscoveredAt: utcNow(),
           udpPort: instance.udpPort ?? null,
         }));
-        if (discovered.some(instance => !Value.Check(InstanceSchema, { ...instance, nodeId: id, udpPort: instance.udpPort || null }))) {
+        const validateInstance = request.compileValidationSchema(InstanceSchema);
+        if (discovered.some(instance => {
+          const candidate = { ...instance, nodeId: id, udpPort: instance.udpPort || null };
+          const original = JSON.stringify(candidate);
+          // Fastify owns the UUID/date-time formats. Reject coercion as well as invalid data.
+          return !validateInstance(candidate) || JSON.stringify(candidate) !== original;
+        })) {
           throw new AppError(502, "INVALID_HELPER_RESPONSE", "Discovery returned an unsupported Instance contract");
         }
         const instances = repository.upsertInstances(id, discovered.map(instance => ({ ...instance, udpPort: instance.udpPort || null })));
