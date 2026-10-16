@@ -806,3 +806,11 @@ privileged/SYS_MODULE. Это отдельная операторская уст
 Legacy распознается по полному legacy-набору активных полей без AWG2/3 расширений,
 даже если его совместимый инструмент называется awg; конфликт с kernel WireGuard
 оставляет Instance read-only.
+
+### Discovery response validation
+
+Panel validates discovered Instance metadata through Fastify's configured schema
+validator, including registered UUID and date-time formats. Validation must also
+reject type coercion, unexpected capability fields and malformed IDs before any
+Instance metadata is committed. An invalid discovery leaves saved Instances
+unchanged and returns `INVALID_HELPER_RESPONSE`.
