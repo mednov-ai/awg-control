@@ -11,7 +11,7 @@ async function main(): Promise<void> {
   const config = loadConfig();
   const database = openDatabase(config.databasePath, config.migrationsPath);
   const repository = new Repository(database);
-  const helper = new SshHelperClient(config.masterKey);
+  const helper = new SshHelperClient(config.masterKey, 15_000, repository);
   const relayClient = new SshRelayClient(config.masterKey);
   const server = await buildServer(config, repository, helper, relayClient);
   const worker = new PollingWorker(repository, helper, new RelayService(repository, relayClient, helper));

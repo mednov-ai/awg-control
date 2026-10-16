@@ -2,6 +2,8 @@ import { createContext, useContext, useMemo, useState, type PropsWithChildren } 
 
 const messages = {
   ru: {
+    wireguardSetupHelp: "Для обычного WireGuard установите отдельный протокол через AmneziaVPN, затем выполните обнаружение сервера в панели.",
+    wireguardRouterHelp: "Скачайте .conf и импортируйте его в WireGuard на роутере. Настройте DNS и маршрутизацию устройств по инструкции роутера. Профиль поддерживает IPv4; отдельно настройте IPv6, чтобы он не обходил VPN. Прямой и Selectel профили используйте поочередно на одном устройстве.",
     dashboard: "Обзор",
     nodes: "Серверы",
     users: "VPN-пользователи",
@@ -161,6 +163,8 @@ const messages = {
     productTagline: "Безопасное управление AmneziaWG",
   },
   en: {
+    wireguardSetupHelp: "For classic WireGuard, install a separate protocol through AmneziaVPN, then run Node discovery in the panel.",
+    wireguardRouterHelp: "Download the .conf and import it into WireGuard on your router. Set DNS and device routing according to the router guide. This profile supports IPv4; configure IPv6 separately to prevent VPN bypass. Use direct and Selectel profiles in turn on one device.",
     dashboard: "Overview",
     nodes: "Nodes",
     users: "VPN users",

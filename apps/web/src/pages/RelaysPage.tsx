@@ -1,5 +1,6 @@
 import { useRef, useState, type FormEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { supportsRelay, instanceProtocolLabel } from "@awg-control/contracts";
 import type {
   InstanceRecord,
   RelayAction,
@@ -188,7 +189,7 @@ function RelayCard({
             <option value="">—</option>
             {choices.map((c) => (
               <option key={c.instance.id} value={c.instance.id}>
-                {c.nodeName} / {c.instance.displayName} (AWG 3.1)
+                {c.nodeName} / {c.instance.displayName} ({instanceProtocolLabel(c.instance)})
               </option>
             ))}
           </select>
@@ -256,9 +257,7 @@ export default function RelaysPage() {
             return instances.items
               .filter(
                 (i) =>
-                  i.protocolVersion === "3.1" &&
-                  i.mode === "managed" &&
-                  i.capabilities.create,
+                  supportsRelay(i),
               )
               .map((instance) => ({ instance, nodeName: node.name }));
           }),

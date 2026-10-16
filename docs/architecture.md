@@ -44,3 +44,14 @@ the client template; comments containing other key-like data remain ignored.
 ## Managed relay boundary
 
 Relay servers are separate from VPN Nodes. A relay-only forced command exposes nginx stream lifecycle through its own awgctl RPC mode. Panel never receives root shell or arbitrary upstream/configuration access. Relay metadata lives in SQLite; the browser derives an endpoint-only alternative from transient issuance. See [relay guide](relay-guide.md).
+
+## Classic WireGuard
+
+The containerized `wireguard` adapter is confirmed by kernel link kind plus
+active configuration; ambiguous/TUN engines remain read-only. VPN RPC 1.1
+supports 1.0 AWG requests without exposing WireGuard as Legacy. Panel negotiates
+via previous-minor health and does not retry mutations. Reclassification retains
+IDs but resets management. Exact interface listen-port mappings replace choosing
+the first published UDP port. Relay eligibility includes confirmed managed
+WireGuard and AWG 3.1; its independent RPC and privilege boundary are unchanged.
+See [the WireGuard guide](wireguard-guide.md) for IPv4 router profiles and gates.

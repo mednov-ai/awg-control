@@ -21,7 +21,7 @@ func (r *recordingRunner) Run(_ context.Context, name string, args []string, _ [
 	if len(args) >= 7 && args[0] == "exec" && args[3] == "stat" {
 		return []byte("600:0:0\n"), nil
 	}
-	if len(args) >= 7 && args[0] == "exec" && args[3] == "awg" && args[4] == "syncconf" {
+	if len(args) >= 7 && args[0] == "exec" && (args[3] == "awg" || args[3] == "wg") && args[4] == "syncconf" {
 		r.syncCalls++
 		if r.failFirstSync && r.syncCalls == 1 {
 			return nil, errors.New("fixture apply failure")

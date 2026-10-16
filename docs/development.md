@@ -23,3 +23,12 @@ and compatibility tests. Security-sensitive bug fixes require regression tests.
 ## Relay verification
 
 Run `scripts/test-relay-lifecycle.sh` for disposable Ubuntu/nginx UDP integration. The fixture uses a process shim for systemctl and validates the actual unit syntax; full systemd/reboot and AWG tunnel acceptance remain pilot checks. Use Node 24 with the pinned pnpm for Panel tests; test key material is synthetic.
+
+## Classic WireGuard verification
+
+Use `scripts/test-wireguard-lifecycle.sh` for an isolated real kernel WireGuard
+and nginx UDP fixture. It needs Docker plus NET_ADMIN/SYS_ADMIN within the
+disposable test container only. Check protocol 1.1/1.0 compatibility, exact UDP
+mapping, standard client fields, identity reclassification, migration 0006→0007
+and backup restore. Keep actual Amnezia engine fixtures, actual router acceptance
+and production preservation evidence distinct from mocked unit coverage.

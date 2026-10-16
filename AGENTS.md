@@ -202,3 +202,11 @@ For Node-facing work, completion also requires evidence that:
 - uninstall leaves Amnezia and peers intact.
 
 Update `spec.md`, operator documentation, OpenAPI/RPC contracts and migrations together with the implementation they describe. Do not report a live-server result without a fresh, narrowly scoped verification.
+
+### Classic WireGuard
+
+- Confirm standard kernel WireGuard runtime and active config; a wg binary or missing AWG markers alone is insufficient. Ambiguous/userspace engines remain read-only.
+- WireGuard is installed separately by the operator through AmneziaVPN; Panel never installs VPN containers. Preserve existing AWG services and routes.
+- VPN RPC 1.1 adds WireGuard, with 1.0 AWG compatibility; never expose it as Legacy or mutate it through 1.0. Reclassification resets Panel management without changing IDs.
+- WireGuard .conf/QR contains only standard IPv4 fields, no AWG parameters or executable hooks; no unverified vpn:// export. Both endpoint variants retain one-time handling.
+- Relay supports confirmed managed AWG 3.1 or WireGuard with exact interface UDP mapping. Unknown/ambiguous ports fail closed. Real router acceptance remains separate from health/build checks.

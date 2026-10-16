@@ -155,6 +155,7 @@ const helper: HelperClient = {
         instances: [
           {
             id: instanceId,
+            adapter: "awg3",
             protocolVersion: "3.1",
             udpPort: 47300,
             readOnly: false,
@@ -240,6 +241,26 @@ describe("relay persistence and operations", () => {
     expect(repo.getInstance(instanceId)).not.toBeNull();
     db.close();
   });
+  it("adds a separate WireGuard route while preserving the AWG route", async () => {
+    const { db, repo } = setup();
+    const wgId = "019a0000-0000-7000-8000-000000000004";
+    const original = repo.getInstance(instanceId)!;
+    repo.upsertInstances(nodeId, [{ ...original, id: wgId, containerRef: "wg-container", interfaceName: "wg0", adapter: "wireguard", protocolVersion: "wireguard", udpPort: 51820 }]);
+    const fresh: HelperClient = { async call<T>(_node: never, r: HelperRequest): Promise<HelperResponse<T>> {
+      return { ok: true, requestId: r.requestId, result: { instances: [original, repo.getInstance(wgId)!].map(i => ({ ...i, readOnly: false })) } as T };
+    } };
+    const remote = new FakeRelay(), service = new RelayService(repo, remote, fresh);
+    await service.status(relayId);
+    await service.mutate(relayId, "install", "wg-install", { expectedFingerprint: remote.status.sourceFingerprint });
+    await service.mutate(relayId, "apply", "awg-route", { instanceId, expectedFingerprint: remote.status.sourceFingerprint });
+    const prior = repo.relays.instanceRoute(instanceId);
+    await service.mutate(relayId, "apply", "wg-route", { instanceId: wgId, listenPort: 51821, expectedFingerprint: remote.status.sourceFingerprint });
+    expect(repo.relays.instanceRoute(instanceId)).toEqual(prior);
+    expect(repo.relays.instanceRoute(wgId)).toMatchObject({ listenPort: 51821, upstreamPort: 51820 });
+    expect(repo.relays.endpoint(wgId)).toMatchObject({ port: 51821 });
+    expect(remote.status.routes).toHaveLength(2);
+    db.close();
+  });
   it("fails closed for AWG2 and stale fingerprints", async () => {
     const { db, repo } = setup();
     const remote = new FakeRelay(),
@@ -274,7 +295,7 @@ describe("relay persistence and operations", () => {
       upgraded
         .prepare("SELECT MAX(version) AS version FROM schema_migrations")
         .get(),
-    ).toMatchObject({ version: 6 });
+    ).toMatchObject({ version: 7 });
     expect(
       upgraded
         .prepare(

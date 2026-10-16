@@ -118,7 +118,11 @@ describe("Panel HTTP boundary", () => {
     db.close();
   });
 
-  it("revokes an applied peer when connection metadata cannot be committed", async () => {
+  it.each([
+    { adapter: "awg3" as const, failCommit: true },
+    { adapter: "wireguard" as const, failCommit: true },
+    { adapter: "wireguard" as const, failCommit: false },
+  ])("preserves one-time issuance and compensates failed metadata: $adapter / $failCommit", async ({ adapter, failCommit }) => {
     const directory = mkdtempSync(join(tmpdir(), "awg-control-issuance-compensation-"));
     directories.push(directory);
     const databasePath = join(directory, "test.db");
@@ -143,9 +147,9 @@ describe("Panel HTTP boundary", () => {
     const appliedFingerprint = "b".repeat(64);
     repository.upsertInstances(nodeId, [{
       id: instanceId,
-      displayName: "AWG 3.1",
-      adapter: "awg3",
-      protocolVersion: "3.1",
+      displayName: "Fixture VPN",
+      adapter,
+      protocolVersion: adapter === "wireguard" ? "wireguard" : "3.1",
       containerRef: "fixture-container",
       interfaceName: "awg0",
       configRef: "fixture-config",
@@ -178,7 +182,7 @@ describe("Panel HTTP boundary", () => {
             requestId: request.requestId,
             result: {
               publicKey: "new-public-key-fixture-value-0001",
-              addressCidr: "10.8.3.2/32",
+              addressCidr: failCommit ? "10.8.3.2/32" : "10.8.3.3/32",
               clientConfig: "one-time-config-fixture",
               sourceFingerprint: appliedFingerprint,
             } as T,
@@ -214,11 +218,23 @@ describe("Panel HTTP boundary", () => {
       headers: { origin: "http://panel.test", cookie, "idempotency-key": "issuance-compensation-test" },
       payload: { instanceId, name: "New device" },
     });
-    expect(response.statusCode).toBe(500);
-    expect(response.json()).toMatchObject({ code: "INTERNAL_ERROR" });
-    expect(helperActions).toEqual(["create", "revoke"]);
-    expect(repository.listConnectionsForUser(user.id)).toHaveLength(1);
-    expect(repository.getInstance(instanceId)?.sourceFingerprint).toBe(originalFingerprint);
+    if (failCommit) {
+      expect(response.statusCode).toBe(500);
+      expect(response.json()).toMatchObject({ code: "INTERNAL_ERROR" });
+      expect(helperActions).toEqual(["create", "revoke"]);
+      expect(repository.listConnectionsForUser(user.id)).toHaveLength(1);
+      expect(repository.getInstance(instanceId)?.sourceFingerprint).toBe(originalFingerprint);
+    } else {
+      expect(response.statusCode).toBe(201);
+      expect(response.headers["cache-control"]).toContain("no-store");
+      expect(response.json().clientConfig === "one-time-config-fixture").toBe(true);
+      const retry = await app.inject({ method: "POST", url: `/api/v1/users/${user.id}/connections`,
+        headers: { origin: "http://panel.test", cookie, "idempotency-key": "issuance-compensation-test" }, payload: { instanceId, name: "New device" } });
+      expect(retry.statusCode).toBe(409);
+      expect(retry.json()).toMatchObject({ code: "CONFIG_ALREADY_ISSUED" });
+      expect(JSON.stringify(repository.listConnectionsForUser(user.id))).not.toContain("one-time-config-fixture");
+      expect(helperActions).toEqual(["create"]);
+    }
     await app.close();
     db.close();
   });

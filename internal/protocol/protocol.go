@@ -74,7 +74,7 @@ func DecodeRequest(reader io.Reader, protocolVersion string) (Request, error) {
 	if decoder.Decode(&struct{}{}) != io.EOF {
 		return Request{}, errors.New("request must contain exactly one JSON value")
 	}
-	if request.ProtocolVersion != protocolVersion {
+	if request.ProtocolVersion != protocolVersion && !(protocolVersion == "1.1" && request.ProtocolVersion == "1.0") {
 		return Request{}, fmt.Errorf("unsupported protocol version %q", request.ProtocolVersion)
 	}
 	if !operationID.MatchString(request.RequestID) || !operationID.MatchString(request.OperationID) {
