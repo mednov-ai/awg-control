@@ -1,9 +1,13 @@
 # Local implementation verification — 2026-10-16
 
-Status: local implementation and normal verification passed; 19/25 tasks complete.
-No live SSH, VPN installation, production peer/route mutation, publication,
-commit/push, release tag, image digest or deployment was performed in this apply.
-The pre-existing dirty work and credential note were retained and not staged.
+Status: implementation, release and server deployment complete; 23/25 tasks
+complete. Panel v0.4.13 and VPN Helper v0.4.12 are installed. Signed releases,
+fresh backups, schema 7 integrity/FK checks and preservation checks passed.
+Direct and Selectel traffic passed with a disposable server-side Linux client;
+router acceptance and shared-host reboot recovery remain open. External Docker
+Desktop testing had a separate Selectel HTTPS/packet-delivery limitation; it is
+recorded explicitly in the deployment report, not counted as router acceptance.
+Unrelated original dirty work and credential notes were retained and not staged.
 
 ## Delivered
 
@@ -53,24 +57,15 @@ startup/CLI timeouts and native assertions are superseded by the successful full
 final check. The OS Node alias was not changed. API Vitest now targets src tests
 so stale dist test copies are not executed alongside current sources.
 
-## Remaining evidence and operational gates
+## Remaining acceptance evidence
 
-- Task 2.1 is partially verified: actual standard kernel WireGuard and negative
-  runtime-kind/config fixtures passed. A matrix of real Amnezia Legacy/AWG2/AWG3
-  engine containers was not created on this Docker Desktop host. Synthetic
-  classification and previous AWG regression tests are not that runtime evidence.
-  Keep this task open; perform the matrix on a disposable compatible Linux host
-  before claiming broad engine acceptance. Userspace/TUN remains read-only.
-- Tasks 6.1–6.5 remain open: separately requested release/deployment, fresh live
-  inventory and snapshots, WireGuard preparation through AmneziaVPN if absent,
-  approved disposable-peer/relay operations, real router handshake/traffic/DNS/
-  Node exit-IP/IPv6/idle/reconnect and separately authorized reboot recovery.
-- Router model/firmware/LAN and IPv6 policy are not known. Neither a local Linux
-  tunnel nor a browser/import test proves acceptance on that router.
-- Existing `add-managed-udp-relay` acceptance was not changed or completed.
-  Production preservation cannot be claimed without fresh before/after checks.
-- This change is not archived.
-
+The real engine matrix below completes task 2.1. Production rollout evidence is
+recorded in [the deployment report](../../../docs/wireguard-deployment-2026-10-16.md).
+Actual-router acceptance (6.4) is left to the operator by explicit request; no
+model/firmware/LAN information is required for issuing a standard profile.
+Shared Selectel-host reboot recovery remains pending without separate reboot
+authorization (6.5). Existing `add-managed-udp-relay` acceptance is unchanged.
+The change remains unarchived.
 
 ## Deployment preparation — 2026-10-16
 
@@ -79,3 +74,12 @@ Operator authorized completing verification and deploying direct/Selectel WireGu
 A complete real Linux engine matrix passed on four renamed disposable containers: standard kernel WireGuard, AmneziaWG Legacy, AWG2 and AWG 3.1. All were detected with the expected adapter/protocol and safe mutation capabilities using temporary published ports. The first run exposed tool-name dependence for Legacy, fixed and covered by a Go regression test. Fixture containers were removed; discovery used isolated Helper state and did not mutate existing configurations. Result evidence: `/root/awg-control-wireguard-20261016T182048Z/matrix-result.json`. Task 2.1 is complete.
 
 Consistent pre-migration SQLite backup: integrity ok, zero FK violations, schema 6. External master key separately protected under `/root/awg-control-key-backups/`; no content collected. Original Helper/image/settings and root-only AWG snapshots are in `/root/awg-control-wireguard-20261016T182048Z`. Release is prepared in an isolated managed worktree from origin/main; unrelated original dirty files remain untouched. Deployment results follow separately.
+
+## Live deployment result
+
+See [the deployment report](../../../docs/wireguard-deployment-2026-10-16.md)
+for release commit/tag/digests, signature verification, backup/rollback scope,
+test vantage points, preserved AWG evidence and remaining network/router gates.
+Tasks 6.1–6.3 are complete. Task 6.4 is deliberately left to the operator; task
+6.5 remains open for separately authorized shared Selectel-host reboot recovery.
+All disposable peers were revoked and temporary maintenance sessions removed.
